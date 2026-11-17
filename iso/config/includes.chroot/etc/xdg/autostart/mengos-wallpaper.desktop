@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=MengOS 壁纸
+Name[en]=MengOS wallpaper
+Comment=按实际显示器名称设置 MengOS 默认壁纸
+Exec=/usr/local/bin/mengos-set-wallpaper
+Terminal=false
+NoDisplay=true
+OnlyShowIn=XFCE;

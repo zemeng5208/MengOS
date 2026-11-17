@@ -65,3 +65,7 @@ snapper
 grub-efi-amd64-bin
 grub-pc-bin
 efibootmgr
+# ===== 外观（T6） =====
+greybird-gtk-theme
+elementary-xfce-icon-theme
+xfce4-power-manager

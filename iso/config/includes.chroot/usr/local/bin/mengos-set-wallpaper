@@ -1,0 +1,14 @@
+#!/bin/sh
+# MengOS：把默认壁纸应用到本次会话里实际存在的所有显示器/工作区。
+# 原因：xfdesktop 的壁纸是按 XRandR 输出名（例如 VMware 上的 Virtual-1）存键的，
+# 而我们无法预知具体机器的输出名，所以登录时按实际键名补设一次。
+WALLPAPER=/usr/share/backgrounds/mengos/default.svg
+[ -f "$WALLPAPER" ] || exit 0
+command -v xfconf-query >/dev/null 2>&1 || exit 0
+for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/backdrop/screen[0-9]*/monitor[^/]*/workspace[0-9]*/last-image$'); do
+  xfconf-query -c xfce4-desktop -p "$p" -s "$WALLPAPER" 2>/dev/null || true
+done
+for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/backdrop/screen[0-9]*/monitor[^/]*/workspace[0-9]*/image-style$'); do
+  xfconf-query -c xfce4-desktop -p "$p" -s 5 2>/dev/null || true
+done
+exit 0
