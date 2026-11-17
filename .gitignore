@@ -1,0 +1,24 @@
+# 构建产物
+/dist/
+*.iso
+/iso/.build/
+/iso/chroot/
+/iso/binary/
+/iso/cache/
+/iso/local/
+/iso/*.log
+/iso/live-image-*
+/iso/config/binary
+/iso/config/bootstrap
+/iso/config/chroot
+/iso/config/common
+/iso/config/source
+# Rust
+/rust/target/
+# 编辑器
+.vscode/
+.idea/
+*.swp
+# 本地临时产物（一律放在项目内，不提交）
+/tmp/
+/.cache/
