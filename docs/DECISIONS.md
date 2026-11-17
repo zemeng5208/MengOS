@@ -16,3 +16,5 @@
 | 2026-11-17 | 跳过逐任务人工验收，每任务合并后继续下一个，最后统一验收 | 用户决定：ISO 体积大、网络卡，逐个验收不现实 |
 | 2026-11-17 | Calamares 默认文件系统改 btrfs：修改真实存在的 `partition.conf` 里的 `defaultFileSystemType`（CI 实测该文件在 `calamares` 包的 `/usr/share/calamares/modules/` 下，`calamares-settings-debian` 只提供 bootloader/fstab/mount/unpackfs 等覆盖项） | 任务书 T5 要求「先调查，再修改」，避免按记忆猜配置项名称与路径 |
 | 2026-11-17 | 在 T5 的 hook 里把 Calamares `users.conf` 的 `userShell` 设为 `/usr/bin/zsh` | T4 第 5 步把「安装后新建用户默认 zsh」留给 T5 验收（A10），而安装器建用户只读 `users.conf`，不读 `/etc/adduser.conf` |
+| 2026-11-17 | 用「新建 `/etc/calamares/modules/partition.conf`」的方式设置 `defaultFileSystemType: "btrfs"`（而不是任务书示例里的 sed 已有文件） | 构建实测：Debian 的 `calamares` 包不装任何模块 `*.conf`，`calamares-settings-debian` 也不提供 `partition.conf`，文件根本不存在，sed 无从下手；键名已用上游 v3.3.14 源码核实 |
+| 2026-11-17 | 在 `partition.conf` 里同时写 `availableFileSystemTypes: ["btrfs", "ext4"]` | 上游注释说明：不写这一项就没有文件系统下拉框（只有固定默认值），而 T5 验收 A4 要求「看文件系统下拉框，默认是 btrfs」 |

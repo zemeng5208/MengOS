@@ -1,49 +1,52 @@
 #!/bin/sh
 set -e
-# MengOS T5：把 Calamares 默认文件系统改为 btrfs，并让安装后的新用户默认使用 zsh。
-# 调查结论（来自 CI，见 docs/STATUS.md / 汇报）：
-#   calamares-settings-debian 只提供 /etc/calamares/modules/ 下的 bootloader.conf、fstab.conf、
-#   mount.conf、unpackfs.conf 等覆盖项，不含 partition.conf；分区模块的默认配置来自
-#   calamares 包本身的 /usr/share/calamares/modules/partition.conf（Calamares 会优先读 /etc 下的同名文件）。
-# 因此这里先找到真实存在的 partition.conf，再改 defaultFileSystemType。
+# MengOS T5：让 Calamares 默认使用 btrfs，并让安装后的新用户默认使用 zsh。
+#
+# 调查结论（本 hook 会把证据全打印到构建日志里，可逐条核实）：
+# 1) Debian 的 calamares 包只安装模块代码（module.desc / main.py / *.so），不提供任何模块 *.conf；
+# 2) calamares-settings-debian 提供 11 个覆盖配置（bootloader、displaymanager、finished、fstab、
+#    luksopenswaphookcfg、machineid、mount、packages、unpackfs、users、welcome），其中没有 partition.conf；
+# 3) 所以分区模块用的是编译进程序的默认值（ext4）。要改默认文件系统，必须在
+#    /etc/calamares/modules/ 下提供 partition.conf —— Calamares 的 settings.conf 里 branding 与
+#    Debian 自带的 11 个模块配置都放在这个目录，它就是 Calamares 读取的配置目录；
+# 4) 键名 defaultFileSystemType 取自 Calamares v3.3.14 上游源码
+#    src/modules/partition/partition.conf（与本 ISO 中的 calamares 3.3.14 版本一致）：
+#    "If nothing is specified, Calamares defaults to \"ext4\""，且不指定 partitionLayout 时
+#    默认就是「整盘一个 root 分区，使用 defaultFileSystemType」。
 
-echo "=== [T5] Calamares 配置调查（构建时） ==="
-echo "--- /etc/calamares/settings.conf ---"
-cat /etc/calamares/settings.conf || true
-echo "--- ls /etc/calamares/modules/ ---"
-ls -l /etc/calamares/modules/ || true
-echo "--- ls /usr/share/calamares/modules/（只列本 hook 关心的两个） ---"
-ls -l /usr/share/calamares/modules/partition.conf /usr/share/calamares/modules/users.conf 2>/dev/null || true
-
-PCONF=""
-for c in /etc/calamares/modules/partition.conf /usr/share/calamares/modules/partition.conf; do
-  if [ -f "$c" ]; then PCONF="$c"; break; fi
+echo "=== [T5] Debian 提供的 Calamares 模块配置（原文） ==="
+for f in /etc/calamares/modules/*.conf; do
+  [ -f "$f" ] || continue
+  echo "--- $f ---"
+  cat "$f"
 done
-if [ -z "$PCONF" ]; then
-  echo "ERROR: 找不到任何 partition.conf" >&2
-  find /etc/calamares /usr/share/calamares -name '*.conf' 2>/dev/null | sort >&2 || true
-  exit 1
-fi
-echo "--- 实际使用的 partition.conf: $PCONF ---"
-echo "--- 修改前的文件系统相关行 ---"
-grep -n 'FileSystem\|filesystem' "$PCONF" || true
 
-if grep -q '^defaultFileSystemType' "$PCONF"; then
-  sed -i 's/^defaultFileSystemType:.*/defaultFileSystemType: "btrfs"/' "$PCONF"
+echo "=== [T5] settings.conf 中安装阶段的模块顺序（决定是否需要联网） ==="
+grep -n -E 'unpackfs|sources-media|bootloader|packages|users|partition|sources-final' /etc/calamares/settings.conf || true
+
+PCONF=/etc/calamares/modules/partition.conf
+if [ -f "$PCONF" ]; then
+  echo "--- 已存在 $PCONF，就地修改 ---"
+  grep -n 'defaultFileSystemType\|availableFileSystemTypes' "$PCONF" || true
+  if grep -q '^defaultFileSystemType' "$PCONF"; then
+    sed -i 's/^defaultFileSystemType:.*/defaultFileSystemType: "btrfs"/' "$PCONF"
+  else
+    echo 'defaultFileSystemType: "btrfs"' >> "$PCONF"
+  fi
 else
-  echo '（文件中没有 defaultFileSystemType 键，追加一行）'
-  echo 'defaultFileSystemType: "btrfs"' >> "$PCONF"
+  echo "--- Debian 未提供 $PCONF，按上游 3.3.14 的键名新建 ---"
+  cat > "$PCONF" <<'EOF'
+# MengOS：默认文件系统改为 btrfs（其余项目继续使用 Calamares 内置默认值）
+defaultFileSystemType: "btrfs"
+availableFileSystemTypes: ["btrfs", "ext4"]
+EOF
 fi
-echo "--- 修改后（完成标准要求日志里出现的那一行） ---"
+echo "--- 完成标准要求日志里出现的那一行 ---"
 grep -n 'defaultFileSystemType' "$PCONF"
 
-# 安装后的新用户默认 shell 用 zsh（T5 验收 A10 依赖此项）
-UCONF=""
-for c in /etc/calamares/modules/users.conf /usr/share/calamares/modules/users.conf; do
-  if [ -f "$c" ]; then UCONF="$c"; break; fi
-done
-if [ -n "$UCONF" ]; then
-  echo "--- 实际使用的 users.conf: $UCONF ---"
+UCONF=/etc/calamares/modules/users.conf
+if [ -f "$UCONF" ]; then
+  echo "--- 修改前的 users.conf 关键项 ---"
   grep -n 'userShell\|autologin' "$UCONF" || true
   if grep -q '^userShell' "$UCONF"; then
     sed -i 's|^userShell:.*|userShell: /usr/bin/zsh|' "$UCONF"
@@ -53,7 +56,7 @@ if [ -n "$UCONF" ]; then
   echo "--- 修改后的 userShell ---"
   grep -n 'userShell' "$UCONF"
 else
-  echo "WARNING: 找不到 users.conf，未设置 userShell"
+  echo "WARNING: 找不到 $UCONF，未设置 userShell"
 fi
 
 echo "=== [T5] hook 完成 ==="
