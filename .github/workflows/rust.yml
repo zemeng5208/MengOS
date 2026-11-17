@@ -1,0 +1,44 @@
+name: rust
+on:
+  push:
+    branches: ["**"]
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.100.0-trixie
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: 显示工具链版本
+        run: |
+          cargo --version
+          rustc --version
+      - name: 添加 serde 依赖并导出 Cargo.lock（临时步骤，lock 提交后删除）
+        run: |
+          cargo add serde --features derive -p feather-core
+          echo "===== crates/feather-core/Cargo.toml ====="
+          cat crates/feather-core/Cargo.toml
+          echo "===== Cargo.lock ====="
+          cat Cargo.lock
+      - name: 上传 Cargo.lock 与 Cargo.toml（临时）
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lock
+          path: |
+            rust/Cargo.lock
+            rust/crates/feather-core/Cargo.toml
+      - name: 安装 rustfmt 与 clippy
+        run: rustup component add rustfmt clippy
+      - name: 检查格式
+        run: cargo fmt --all -- --check
+      - name: Clippy（警告当作错误）
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: 单元测试
+        run: cargo test --workspace
