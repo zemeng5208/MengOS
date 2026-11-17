@@ -1,0 +1,29 @@
+name: check-packages
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+    steps:
+      - name: 安装 git
+        run: apt-get update && apt-get install -y git ca-certificates
+      - uses: actions/checkout@v4
+      - name: 显示系统版本
+        run: cat /etc/os-release
+      - name: 启用 contrib/non-free 源并更新
+        run: |
+          sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
+          apt-get update
+      - name: 检查软件包
+        run: bash scripts/check-packages.sh | tee package-check.txt
+      - name: 上传检查结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-check
+          path: package-check.txt
