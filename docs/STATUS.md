@@ -6,7 +6,7 @@
 | T1 创建仓库和基础文件 | 已完成（用户已验收） | 2026-11-17 | c5a96f8（初始提交） | 仓库 `zemeng5208/MengOS`（public）已创建；8 个基础文件已提交并推送 |
 | T2 第一条 CI 流水线 | 已完成（用户已验收并合并） | 2026-11-17 | dac62a4（squash 合并） | 29 个包全部 `OK`、缺失 0；PR #1 已合并，分支已删除 |
 | T3 最小可启动 ISO | 已完成（**用户暂缓验收**，最后一并验收） | 2026-11-17 | 8a2a2f0（squash 合并） | ISO 构建成功：run 44087258913，job `build` 8 分 15 秒；`MengOS-0.0.1-dev.1-amd64.iso` 约 1.5G，SHA256 `8399cd4f5320e5d33d9edd10aac7cc4ac571ae6537c9dc79c257bdf1af93f1a1`；PR #2 已合并 |
-| T4 中文、输入法、常用软件、zsh | 进行中 | — | — | 分支 `task/T4-chinese`：包清单追加 21 个中文/终端相关包（共 50 个）、`--bootappend-live` 加 `locales=zh_CN.UTF-8 keyboard-layouts=us timezone=Asia/Shanghai`、新增 hook `0100-mengos-chinese`、新增 `/etc/skel/.zshrc`、CI 临时步骤核验 `dpkg -L` 路径 |
+| T4 中文、输入法、常用软件、zsh | 进行中 | — | — | 分支 `task/T4-chinese`：包清单追加 **19** 个中文/终端相关包（总数 29 → **48**，CI 实测 `缺失 0 个`）、`--bootappend-live` 加 `locales=zh_CN.UTF-8 keyboard-layouts=us timezone=Asia/Shanghai`、新增 hook `0100-mengos-chinese`、新增 `/etc/skel/.zshrc`；`.zshrc` 里 3 个 source 路径已用 CI 的 `dpkg -L` 逐一核实存在 |
 | T5 图形安装器 Calamares | 未开始 | — | — | 等 T4 完成 |
 | T6 外观 | 未开始 | — | — | |
 | T7 Rust 工程骨架 | 未开始 | — | — | |
