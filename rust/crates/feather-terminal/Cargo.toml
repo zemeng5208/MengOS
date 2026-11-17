@@ -1,0 +1,12 @@
+[package]
+name = "feather-terminal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MengOS 的终端（GTK4 + VTE4）"
+
+[[bin]]
+name = "feather-terminal"
+path = "src/main.rs"
+
+[dependencies]
