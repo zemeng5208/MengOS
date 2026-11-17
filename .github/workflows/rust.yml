@@ -1,0 +1,30 @@
+name: rust
+on:
+  push:
+    branches: ["**"]
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.100.0-trixie
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: 显示工具链版本
+        run: |
+          cargo --version
+          rustc --version
+      - name: 安装 rustfmt 与 clippy
+        run: rustup component add rustfmt clippy
+      - name: 检查格式
+        run: cargo fmt --all -- --check
+      - name: Clippy（警告当作错误）
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: 单元测试
+        run: cargo test --workspace
