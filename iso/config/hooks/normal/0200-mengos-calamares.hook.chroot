@@ -1,0 +1,62 @@
+#!/bin/sh
+set -e
+# MengOS T5：让 Calamares 默认使用 btrfs，并让安装后的新用户默认使用 zsh。
+#
+# 调查结论（本 hook 会把证据全打印到构建日志里，可逐条核实）：
+# 1) Debian 的 calamares 包只安装模块代码（module.desc / main.py / *.so），不提供任何模块 *.conf；
+# 2) calamares-settings-debian 提供 11 个覆盖配置（bootloader、displaymanager、finished、fstab、
+#    luksopenswaphookcfg、machineid、mount、packages、unpackfs、users、welcome），其中没有 partition.conf；
+# 3) 所以分区模块用的是编译进程序的默认值（ext4）。要改默认文件系统，必须在
+#    /etc/calamares/modules/ 下提供 partition.conf —— Calamares 的 settings.conf 里 branding 与
+#    Debian 自带的 11 个模块配置都放在这个目录，它就是 Calamares 读取的配置目录；
+# 4) 键名 defaultFileSystemType 取自 Calamares v3.3.14 上游源码
+#    src/modules/partition/partition.conf（与本 ISO 中的 calamares 3.3.14 版本一致）：
+#    "If nothing is specified, Calamares defaults to \"ext4\""，且不指定 partitionLayout 时
+#    默认就是「整盘一个 root 分区，使用 defaultFileSystemType」。
+
+echo "=== [T5] Debian 提供的 Calamares 模块配置（原文） ==="
+for f in /etc/calamares/modules/*.conf; do
+  [ -f "$f" ] || continue
+  echo "--- $f ---"
+  cat "$f"
+done
+
+echo "=== [T5] settings.conf 中安装阶段的模块顺序（决定是否需要联网） ==="
+grep -n -E 'unpackfs|sources-media|bootloader|packages|users|partition|sources-final' /etc/calamares/settings.conf || true
+
+PCONF=/etc/calamares/modules/partition.conf
+if [ -f "$PCONF" ]; then
+  echo "--- 已存在 $PCONF，就地修改 ---"
+  grep -n 'defaultFileSystemType\|availableFileSystemTypes' "$PCONF" || true
+  if grep -q '^defaultFileSystemType' "$PCONF"; then
+    sed -i 's/^defaultFileSystemType:.*/defaultFileSystemType: "btrfs"/' "$PCONF"
+  else
+    echo 'defaultFileSystemType: "btrfs"' >> "$PCONF"
+  fi
+else
+  echo "--- Debian 未提供 $PCONF，按上游 3.3.14 的键名新建 ---"
+  cat > "$PCONF" <<'EOF'
+# MengOS：默认文件系统改为 btrfs（其余项目继续使用 Calamares 内置默认值）
+defaultFileSystemType: "btrfs"
+availableFileSystemTypes: ["btrfs", "ext4"]
+EOF
+fi
+echo "--- 完成标准要求日志里出现的那一行 ---"
+grep -n 'defaultFileSystemType' "$PCONF"
+
+UCONF=/etc/calamares/modules/users.conf
+if [ -f "$UCONF" ]; then
+  echo "--- 修改前的 users.conf 关键项 ---"
+  grep -n 'userShell\|autologin' "$UCONF" || true
+  if grep -q '^userShell' "$UCONF"; then
+    sed -i 's|^userShell:.*|userShell: /usr/bin/zsh|' "$UCONF"
+  else
+    echo 'userShell: /usr/bin/zsh' >> "$UCONF"
+  fi
+  echo "--- 修改后的 userShell ---"
+  grep -n 'userShell' "$UCONF"
+else
+  echo "WARNING: 找不到 $UCONF，未设置 userShell"
+fi
+
+echo "=== [T5] hook 完成 ==="
