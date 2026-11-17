@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+# 生成中文和英文 locale
+sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen
+sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+update-locale LANG=zh_CN.UTF-8
+# 默认输入法框架设为 fcitx5
+im-config -n fcitx5 || true
+# 新用户默认 shell 为 zsh
+sed -i 's|^DSHELL=.*|DSHELL=/usr/bin/zsh|' /etc/adduser.conf || true
+sed -i 's|^SHELL=.*|SHELL=/usr/bin/zsh|' /etc/default/useradd || true

@@ -10,6 +10,6 @@ lb config noauto \
   --iso-application "MengOS" \
   --iso-volume "MengOS" \
   --iso-publisher "MengOS Project" \
-  --bootappend-live "boot=live components username=user hostname=mengos" \
+  --bootappend-live "boot=live components username=user hostname=mengos locales=zh_CN.UTF-8 keyboard-layouts=us timezone=Asia/Shanghai" \
   --memtest none \
   "${@}"
