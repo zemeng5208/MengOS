@@ -19,6 +19,23 @@ jobs:
         run: |
           sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
           apt-get update
+      - name: 临时核验 dpkg -L 路径（T4 调查用，确认后删除）
+        run: |
+          apt-get install -y zsh-autosuggestions zsh-syntax-highlighting fzf
+          {
+            echo "=== zsh-autosuggestions ==="
+            dpkg -L zsh-autosuggestions
+            echo "=== zsh-syntax-highlighting ==="
+            dpkg -L zsh-syntax-highlighting
+            echo "=== fzf ==="
+            dpkg -L fzf
+          } | tee path-check.txt
+      - name: 上传路径核验结果（临时）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: path-check
+          path: path-check.txt
       - name: 检查软件包
         run: bash scripts/check-packages.sh | tee package-check.txt
       - name: 上传检查结果
