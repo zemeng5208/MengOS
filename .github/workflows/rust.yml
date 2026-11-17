@@ -20,20 +20,6 @@ jobs:
         run: |
           cargo --version
           rustc --version
-      - name: 添加 serde 依赖并导出 Cargo.lock（临时步骤，lock 提交后删除）
-        run: |
-          cargo add serde --features derive -p feather-core
-          echo "===== crates/feather-core/Cargo.toml ====="
-          cat crates/feather-core/Cargo.toml
-          echo "===== Cargo.lock ====="
-          cat Cargo.lock
-      - name: 上传 Cargo.lock 与 Cargo.toml（临时）
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-lock
-          path: |
-            rust/Cargo.lock
-            rust/crates/feather-core/Cargo.toml
       - name: 安装 rustfmt 与 clippy
         run: rustup component add rustfmt clippy
       - name: 检查格式
