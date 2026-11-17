@@ -57,3 +57,11 @@ python3
 btop
 # ===== 工具 =====
 xfce4-screenshooter
+# ===== 安装器 =====
+calamares
+calamares-settings-debian
+btrfs-progs
+snapper
+grub-efi-amd64-bin
+grub-pc-bin
+efibootmgr
