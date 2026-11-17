@@ -20,6 +20,11 @@ jobs:
           apt-get install -y git ca-certificates live-build debootstrap squashfs-tools xorriso \
             grub-pc-bin grub-efi-amd64-bin mtools dosfstools syslinux syslinux-common isolinux
       - uses: actions/checkout@v4
+      - name: 校验 XML 语法
+        run: |
+          apt-get install -y libxml2-utils
+          find iso/config/includes.chroot -name '*.xml' -print0 | xargs -0 -r xmllint --noout
+          echo "XML 语法检查通过"
       - name: 构建 ISO
         env:
           MENGOS_VERSION: 0.0.1-dev.${{ github.run_number }}

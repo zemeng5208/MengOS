@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MengOS 默认壁纸：自行绘制的浅蓝到浅灰渐变，无任何第三方素材 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="mengos-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#cfe4f6"/>
+      <stop offset="55%" stop-color="#e6edf3"/>
+      <stop offset="100%" stop-color="#f2f4f5"/>
+    </linearGradient>
+    <radialGradient id="mengos-glow" cx="0.78" cy="0.22" r="0.55">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mengos-horizon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8fb6d6" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#8fb6d6" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#mengos-bg)"/>
+  <rect width="1920" height="1080" fill="url(#mengos-glow)"/>
+
+  <path d="M0 742 C 360 690, 620 786, 960 748 C 1300 710, 1560 640, 1920 692 L1920 1080 L0 1080 Z"
+        fill="#dbe6ee" opacity="0.75"/>
+  <path d="M0 828 C 420 790, 700 872, 1010 842 C 1330 812, 1620 736, 1920 782 L1920 1080 L0 1080 Z"
+        fill="#e7eef3" opacity="0.9"/>
+  <rect x="0" y="700" width="1920" height="4" fill="url(#mengos-horizon)"/>
+
+  <text x="120" y="906" font-family="Noto Sans CJK SC, DejaVu Sans, sans-serif" font-size="82"
+        font-weight="300" fill="#5d7083" letter-spacing="2">MengOS</text>
+  <text x="124" y="954" font-family="Noto Sans CJK SC, DejaVu Sans, sans-serif" font-size="26"
+        fill="#93a4b2">简洁 · 中文友好</text>
+</svg>

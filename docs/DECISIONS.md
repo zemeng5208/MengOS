@@ -18,3 +18,8 @@
 | 2026-11-17 | 在 T5 的 hook 里把 Calamares `users.conf` 的 `userShell` 设为 `/usr/bin/zsh` | T4 第 5 步把「安装后新建用户默认 zsh」留给 T5 验收（A10），而安装器建用户只读 `users.conf`，不读 `/etc/adduser.conf` |
 | 2026-11-17 | 用「新建 `/etc/calamares/modules/partition.conf`」的方式设置 `defaultFileSystemType: "btrfs"`（而不是任务书示例里的 sed 已有文件） | 构建实测：Debian 的 `calamares` 包不装任何模块 `*.conf`，`calamares-settings-debian` 也不提供 `partition.conf`，文件根本不存在，sed 无从下手；键名已用上游 v3.3.14 源码核实 |
 | 2026-11-17 | 在 `partition.conf` 里同时写 `availableFileSystemTypes: ["btrfs", "ext4"]` | 上游注释说明：不写这一项就没有文件系统下拉框（只有固定默认值），而 T5 验收 A4 要求「看文件系统下拉框，默认是 btrfs」 |
+| 2026-11-17 | 外观：GTK/窗口主题 `Greybird`、图标 `elementary-xfce`、自绘 SVG 渐变壁纸（浅蓝→浅灰）、单顶部面板 | T6 要求；禁止使用 Apple 图标/字体/壁纸，壁纸全部由自己写的 SVG 代码生成 |
+| 2026-11-17 | 面板 XML 结构照抄 CI 里取到的 Debian 自带 `/etc/xdg/xfce4/panel/default.xml`（只保留一个顶部面板，插件改为 whiskermenu/tasklist/systray/pulseaudio/power-manager/clock） | 任务书明确要求「不要凭空编写」，面板插件名错一个就会弹「插件错误」 |
+| 2026-11-17 | 额外安装 `xfce4-power-manager` | 面板要用 `power-manager-plugin`，而 `xfce4` 元包只把它列为 `Suggests`（音量的 `xfce4-pulseaudio-plugin` 则是 `Depends`，不用额外加） |
+| 2026-11-17 | 额外增加 `/usr/local/bin/mengos-set-wallpaper` 与 `/etc/xdg/autostart/mengos-wallpaper.desktop` | xfdesktop 的壁纸按 XRandR 输出名存键（VMware 下可能是 `Virtual-1` 等），无法预知；登录后用 `xfconf-query` 按实际键名补设，保证验收 A1 能看到渐变壁纸 |
+| 2026-11-17 | `build-iso.yml` 增加 `xmllint --noout` 校验 XML 的步骤 | 任务书 T6 第 4 步要求；XML 写错会让整个桌面配置静默失效 |
