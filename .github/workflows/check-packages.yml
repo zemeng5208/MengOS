@@ -19,22 +19,6 @@ jobs:
         run: |
           sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' /etc/apt/sources.list.d/debian.sources
           apt-get update
-      - name: 临时调查 Calamares 配置（T5 调查用，确认后删除）
-        run: |
-          apt-get install -y calamares-settings-debian
-          mkdir -p cal-invest
-          dpkg -L calamares-settings-debian > cal-invest/dpkg-L.txt 2>&1 || true
-          cat /etc/calamares/settings.conf > cal-invest/settings.conf 2>&1 || true
-          cat /etc/calamares/modules/partition.conf > cal-invest/partition.conf 2>&1 || true
-          { cat /usr/sbin/bootloader-config 2>/dev/null || cat /usr/lib/calamares/*bootloader* 2>/dev/null || true; } > cal-invest/bootloader.txt
-          grep -n 'FileSystem' /etc/calamares/modules/partition.conf > cal-invest/grep-fs.txt 2>&1 || true
-          ls -la /etc/calamares/ > cal-invest/etc-calamares-ls.txt 2>&1 || true
-      - name: 上传调查结果（临时）
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cal-invest
-          path: cal-invest/
       - name: 检查软件包
         run: bash scripts/check-packages.sh | tee package-check.txt
       - name: 上传检查结果

@@ -7,7 +7,7 @@
 | T2 第一条 CI 流水线 | 已完成（用户已验收并合并） | 2026-11-17 | dac62a4（squash 合并） | 29 个包全部 `OK`、缺失 0；PR #1 已合并 |
 | T3 最小可启动 ISO | 已完成（用户暂缓验收） | 2026-11-17 | 8a2a2f0（squash 合并） | ISO `MengOS-0.0.1-dev.1-amd64.iso` 约 1.5G，SHA256 `8399cd4f5320e5d33d9edd10aac7cc4ac571ae6537c9dc79c257bdf1af93f1a1`；run 44087258913（8 分 15 秒） |
 | T4 中文、输入法、常用软件、zsh | 已完成（用户暂缓验收） | 2026-11-17 | 3cff081（squash 合并） | 48 个包缺失 0；`.zshrc` 3 个 source 路径经 CI `dpkg -L` 核实存在；ISO `MengOS-0.0.1-dev.4-amd64.iso` 约 1.7G，SHA256 `000ea4e4316f0c0ec6ff944fcaa4f52c3a53580df7a8698f3614a30fc85db530`；构建日志确认 fcitx5 / zsh / firefox-esr / fonts-noto-cjk 已安装，`etc/skel/.zshrc` 与 hook `0100-mengos-chinese` 均生效 |
-| T5 图形安装器 Calamares | 进行中 | — | — | 分支 `task/T5-installer`：包清单追加 7 个安装器相关包（总数 48 → 55）；正用 CI 临时步骤调查 `calamares-settings-debian` 的 `partition.conf` 默认文件系统配置项与引导程序安装方式 |
+| T5 图形安装器 Calamares | 进行中 | — | — | 分支 `task/T5-installer`：包清单追加 7 个安装器相关包（总数 48 → 55，CI 实测 `缺失 0 个`）；调查结论：`calamares-settings-debian` **不提供** `partition.conf`，分区默认值来自 `calamares` 包的 `/usr/share/calamares/modules/partition.conf`；hook `0200-mengos-calamares` 在构建时定位该文件、把 `defaultFileSystemType` 改为 `btrfs`，并把 `users.conf` 的 `userShell` 设为 `/usr/bin/zsh`；等 ISO 构建 |
 | T6 外观 | 未开始 | — | — | |
 | T7 Rust 工程骨架 | 未开始 | — | — | |
 | T8 FeatherTerminal 第一版 | 未开始 | — | — | |
