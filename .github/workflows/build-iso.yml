@@ -1,0 +1,42 @@
+name: build-iso
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["iso/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
+  push:
+    branches: [main]
+    paths: ["iso/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: debian:trixie
+      options: --privileged
+    steps:
+      - name: 安装构建工具
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates live-build debootstrap squashfs-tools xorriso \
+            grub-pc-bin grub-efi-amd64-bin mtools dosfstools syslinux syslinux-common isolinux
+      - uses: actions/checkout@v4
+      - name: 构建 ISO
+        env:
+          MENGOS_VERSION: 0.0.1-dev.${{ github.run_number }}
+        run: bash scripts/build-iso.sh
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: iso/build.log
+      - name: 上传 ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: mengos-iso
+          path: |
+            dist/*.iso
+            dist/*.sha256
+            dist/*.packages.txt
+          retention-days: 14
+          compression-level: 0

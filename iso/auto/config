@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+lb config noauto \
+  --mode debian \
+  --distribution trixie \
+  --architectures amd64 \
+  --archive-areas "main contrib non-free non-free-firmware" \
+  --binary-images iso-hybrid \
+  --debian-installer none \
+  --iso-application "MengOS" \
+  --iso-volume "MengOS" \
+  --iso-publisher "MengOS Project" \
+  --bootappend-live "boot=live components username=user hostname=mengos" \
+  --memtest none \
+  "${@}"
