@@ -25,37 +25,28 @@ jobs:
           dpkg-query -W -f='${Package} ${Version}\n' libgtk-4-dev libvte-2.91-gtk4-dev pkg-config
           pkg-config --modversion gtk4
           pkg-config --modversion vte-2.91-gtk4
-      - name: 添加 vte4 与 gtk4 依赖（临时步骤，Cargo.toml 提交后删除）
+      - name: 检查 gtk4 版本与 VTE 绑定 API（临时步骤，任务完成后删除）
         run: |
-          cargo add vte4 -p feather-terminal
-          cargo add gtk4 --rename gtk -p feather-terminal
-          echo "===== crates/feather-terminal/Cargo.toml ====="
-          cat crates/feather-terminal/Cargo.toml
-      - name: 检查 gtk4 版本与 VTE 绑定 API（临时步骤）
-        run: |
-          cargo fetch
           echo "===== cargo tree -i gtk4 ====="
-          cargo tree -i gtk4
-          echo "===== vte4 生成的 API ====="
-          grep -rn "pub fn connect_child_exited\|pub fn copy_clipboard\|pub fn paste_clipboard\|pub enum Format" \
-            ~/.cargo/registry/src/*/vte4-0.10.0/src/ || echo "未找到"
-      - name: 上传 Cargo.lock 与 Cargo.toml（临时）
-        uses: actions/upload-artifact@v4
-        with:
-          name: terminal-lock
-          path: |
-            rust/Cargo.lock
-            rust/crates/feather-terminal/Cargo.toml
+          cargo tree -i gtk4 || true
+          echo "===== vte4 源码里的相关 API ====="
+          cargo fetch >/dev/null 2>&1 || true
+          VTE_DIR=$(find "$HOME/.cargo/registry/src" -maxdepth 2 -type d -name 'vte4-0.10.0' 2>/dev/null | head -1)
+          echo "vte4 源码目录: ${VTE_DIR:-未找到}"
+          if [ -n "$VTE_DIR" ]; then
+            grep -rn "child_exited\|copy_clipboard\|paste_clipboard" "$VTE_DIR/src/" | head -30 || true
+            grep -rn "pub enum Format" "$VTE_DIR/src/auto/enums.rs" || true
+          fi
       - name: 安装 rustfmt 与 clippy
         run: rustup component add rustfmt clippy
-      - name: 检查格式
-        run: cargo fmt --all -- --check
-      - name: Clippy（警告当作错误）
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: 单元测试
-        run: cargo test --workspace
       - name: 编译 release 版 FeatherTerminal
         run: cargo build --release -p feather-terminal
+      - name: Clippy（警告当作错误）
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: 检查格式
+        run: cargo fmt --all -- --check
+      - name: 单元测试
+        run: cargo test --workspace
       - name: 上传 FeatherTerminal 二进制
         uses: actions/upload-artifact@v4
         with:

@@ -63,8 +63,7 @@ fn install_shortcuts(window: &gtk::ApplicationWindow, terminal: &vte4::Terminal)
     let terminal = terminal.clone();
 
     controller.connect_key_pressed(move |_, keyval, _keycode, state| {
-        let ctrl_shift =
-            gtk::gdk::ModifierType::CONTROL_MASK | gtk::gdk::ModifierType::SHIFT_MASK;
+        let ctrl_shift = gtk::gdk::ModifierType::CONTROL_MASK | gtk::gdk::ModifierType::SHIFT_MASK;
         if !state.contains(ctrl_shift) {
             return gtk::glib::Propagation::Proceed;
         }

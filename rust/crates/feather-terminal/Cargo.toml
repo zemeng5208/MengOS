@@ -10,3 +10,5 @@ name = "feather-terminal"
 path = "src/main.rs"
 
 [dependencies]
+gtk = { version = "0.11.5", package = "gtk4" }
+vte4 = "0.10.0"
