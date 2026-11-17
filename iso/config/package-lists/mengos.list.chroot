@@ -1,0 +1,37 @@
+# ===== 桌面 =====
+xfce4
+xfce4-goodies
+xfce4-whiskermenu-plugin
+lightdm
+lightdm-gtk-greeter
+# ===== 文件管理 =====
+thunar
+thunar-volman
+gvfs
+gvfs-backends
+file-roller
+# ===== 常用软件 =====
+firefox-esr
+mousepad
+ristretto
+# ===== 声音 =====
+pipewire
+pipewire-pulse
+wireplumber
+pavucontrol
+# ===== 网络 =====
+network-manager
+network-manager-gnome
+# ===== VMware =====
+open-vm-tools
+open-vm-tools-desktop
+# ===== 系统 =====
+sudo
+dbus-user-session
+polkitd
+pkexec
+xdg-user-dirs
+# ===== Live 系统 =====
+live-boot
+live-config
+live-config-systemd
