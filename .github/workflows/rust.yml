@@ -16,15 +16,27 @@ jobs:
         working-directory: rust
     steps:
       - uses: actions/checkout@v4
-      - name: 显示工具链版本
+      - name: 安装 GTK4 / VTE4 开发库
+        run: apt-get update && apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config
+      - name: 显示工具链与系统库版本
         run: |
           cargo --version
           rustc --version
+          dpkg-query -W -f='${Package} ${Version}\n' libgtk-4-dev libvte-2.91-gtk4-dev pkg-config
+          pkg-config --modversion gtk4
+          pkg-config --modversion vte-2.91-gtk4
       - name: 安装 rustfmt 与 clippy
         run: rustup component add rustfmt clippy
-      - name: 检查格式
-        run: cargo fmt --all -- --check
+      - name: 编译 release 版 FeatherTerminal
+        run: cargo build --release -p feather-terminal
       - name: Clippy（警告当作错误）
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: 检查格式
+        run: cargo fmt --all -- --check
       - name: 单元测试
         run: cargo test --workspace
+      - name: 上传 FeatherTerminal 二进制
+        uses: actions/upload-artifact@v4
+        with:
+          name: feather-terminal
+          path: rust/target/release/feather-terminal
