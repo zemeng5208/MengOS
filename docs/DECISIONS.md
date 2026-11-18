@@ -23,3 +23,9 @@
 | 2026-11-17 | 额外安装 `xfce4-power-manager` | 面板要用 `power-manager-plugin`，而 `xfce4` 元包只把它列为 `Suggests`（音量的 `xfce4-pulseaudio-plugin` 则是 `Depends`，不用额外加） |
 | 2026-11-17 | 额外增加 `/usr/local/bin/mengos-set-wallpaper` 与 `/etc/xdg/autostart/mengos-wallpaper.desktop` | xfdesktop 的壁纸按 XRandR 输出名存键（VMware 下可能是 `Virtual-1` 等），无法预知；登录后用 `xfconf-query` 按实际键名补设，保证验收 A1 能看到渐变壁纸 |
 | 2026-11-17 | `build-iso.yml` 增加 `xmllint --noout` 校验 XML 的步骤 | 任务书 T6 第 4 步要求；XML 写错会让整个桌面配置静默失效 |
+| 2026-11-17 | Rust 工具链用 `rust-toolchain.toml` 锁 1.100.0，CI 容器 `rust:1.100.0-trixie` | 与 Debian trixie 的 glibc 对齐；本地无法编译，版本必须由仓库固定，避免 CI 漂移 |
+| 2026-11-17 | `Cargo.lock` 提交进仓库（由 CI 生成后回传） | Windows 本地没有 Rust 工具链，lock 只能由 CI 产出；提交后构建可复现 |
+| 2026-11-18 | FeatherTerminal 锁 `vte4 0.10.0` + `gtk4 0.11.5`，并给 vte4 打开 `gtk_v4_18` 特性 | 实测：gtk4 0.11.5 的 `auto/mod.rs` 把 `Accessible` 放在 `#[cfg(feature = "v4_10")]` 下，而 vte4 的 wrapper 无条件 `@implements gtk::Accessible`，不开特性就报 `E0425`；系统 GTK 4.18.6 满足 `v4_18` 的版本要求 |
+| 2026-11-18 | 代码里用 `vte4::Format::Text`（不是 `TEXT`） | gtk-rs 0.11 起枚举变体改为 UpperCamelCase，CI 编译错误与编译器建议都证实这点 |
+| 2026-11-18 | `spawn_async` 的 `envv` 显式传 `std::env::vars()` 拼出的环境 | vte4 0.10 中该参数类型是 `&[&str]`（不是 `Option`），传空切片可能给子进程一个空环境，导致 shell 没有 PATH/HOME |
+| 2026-11-18 | `rust.yml` 增加「安装 GTK4/VTE4 开发库 + release 编译 + 上传二进制 artifact」 | 任务书 T8 要求；`cargo build` 需要 `libgtk-4-dev`/`libvte-2.91-gtk4-dev`/`pkg-config` |
