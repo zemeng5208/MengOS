@@ -2,12 +2,45 @@ name: build-iso
 on:
   workflow_dispatch:
   pull_request:
-    paths: ["iso/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
+    paths: ["iso/**", "rust/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
   push:
     branches: [main]
-    paths: ["iso/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
+    paths: ["iso/**", "rust/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
 jobs:
-  build:
+  build-deb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: rust:1.100.0-trixie
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 GTK4 / VTE4 开发库
+        run: |
+          apt-get update
+          apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config
+      - name: 安装 cargo-deb
+        run: cargo install cargo-deb --locked
+      - name: 打包 feather-terminal
+        run: |
+          cargo deb -p feather-terminal
+          echo "== 生成的 deb =="
+          ls -l target/debian/
+      - name: 显示 deb 里的文件与依赖
+        run: |
+          echo "== dpkg-deb -c（文件清单）=="
+          dpkg-deb -c target/debian/*.deb
+          echo "== dpkg-deb -I（控制信息）=="
+          dpkg-deb -I target/debian/*.deb
+      - name: 上传 .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: mengos-deb
+          path: rust/target/debian/*.deb
+  build-iso:
+    needs: build-deb
     runs-on: ubuntu-latest
     timeout-minutes: 120
     container:
@@ -20,6 +53,13 @@ jobs:
           apt-get install -y git ca-certificates live-build debootstrap squashfs-tools xorriso \
             grub-pc-bin grub-efi-amd64-bin mtools dosfstools syslinux syslinux-common isolinux
       - uses: actions/checkout@v4
+      - name: 下载 FeatherTerminal 的 .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: mengos-deb
+          path: iso/config/packages.chroot
+      - name: 显示将要安装的本地 deb
+        run: ls -l iso/config/packages.chroot/
       - name: 校验 XML 语法
         run: |
           apt-get install -y libxml2-utils
@@ -29,6 +69,14 @@ jobs:
         env:
           MENGOS_VERSION: 0.0.1-dev.${{ github.run_number }}
         run: bash scripts/build-iso.sh
+      - name: 核对 feather-terminal 已进入包清单
+        run: |
+          echo "== 包清单里与 feather-terminal 相关的行 =="
+          grep -in 'feather-terminal' dist/*.packages.txt || true
+          echo "== 包清单总行数 =="
+          wc -l dist/*.packages.txt
+          echo "== 包清单前 3 行（说明格式）=="
+          head -3 dist/*.packages.txt
       - name: 上传构建日志
         if: always()
         uses: actions/upload-artifact@v4

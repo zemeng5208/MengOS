@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FeatherTerminal
+Name[zh_CN]=FeatherTerminal 终端
+Comment=MengOS terminal
+Exec=feather-terminal
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
