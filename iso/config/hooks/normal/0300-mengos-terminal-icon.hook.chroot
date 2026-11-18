@@ -1,0 +1,30 @@
+#!/bin/sh
+# 把 FeatherTerminal 的 .desktop 放进“新用户桌面目录” /etc/skel/Desktop，并设为可执行，
+# 这样 Xfce 不会把它当成不受信任的启动器（否则双击时会弹提示或直接拒绝运行）。
+set -e
+
+DESKTOP=/usr/share/applications/mengos-terminal.desktop
+
+if [ ! -f "$DESKTOP" ]; then
+    echo "错误：$DESKTOP 不存在，feather-terminal 的 deb 没有装进 chroot" >&2
+    exit 1
+fi
+
+mkdir -p /etc/skel/Desktop
+install -m 0755 "$DESKTOP" /etc/skel/Desktop/mengos-terminal.desktop
+
+echo "== /etc/skel/Desktop 内容 =="
+ls -l /etc/skel/Desktop/
+
+# 如果 live-build 已经创建了 Live 用户的主目录，也放一份（只有存在时才做）。
+for home in /home/user /home/live; do
+    if [ -d "$home" ]; then
+        mkdir -p "$home/Desktop"
+        install -m 0755 "$DESKTOP" "$home/Desktop/mengos-terminal.desktop"
+        echo "== $home/Desktop 内容 =="
+        ls -l "$home/Desktop/"
+    fi
+done
+
+echo "== 运行 hook 时 /home 的内容（用于确认用户创建顺序）=="
+ls -la /home || true

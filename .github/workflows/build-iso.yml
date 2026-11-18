@@ -2,12 +2,39 @@ name: build-iso
 on:
   workflow_dispatch:
   pull_request:
-    paths: ["iso/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
+    paths: ["iso/**", "rust/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
   push:
     branches: [main]
-    paths: ["iso/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
+    paths: ["iso/**", "rust/**", "scripts/build-iso.sh", ".github/workflows/build-iso.yml"]
 jobs:
-  build:
+  build-deb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: rust:1.100.0-trixie
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 GTK4 / VTE4 开发库
+        run: |
+          apt-get update
+          apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config
+      - name: 安装 cargo-deb
+        run: cargo install cargo-deb --locked
+      - name: 打包 feather-terminal
+        run: |
+          cargo deb -p feather-terminal
+          echo "== 生成的 deb =="
+          ls -l target/debian/
+      - name: 上传 .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: mengos-deb
+          path: rust/target/debian/*.deb
+  build-iso:
+    needs: build-deb
     runs-on: ubuntu-latest
     timeout-minutes: 120
     container:
@@ -20,6 +47,13 @@ jobs:
           apt-get install -y git ca-certificates live-build debootstrap squashfs-tools xorriso \
             grub-pc-bin grub-efi-amd64-bin mtools dosfstools syslinux syslinux-common isolinux
       - uses: actions/checkout@v4
+      - name: 下载 FeatherTerminal 的 .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: mengos-deb
+          path: iso/config/packages.chroot
+      - name: 显示将要安装的本地 deb
+        run: ls -l iso/config/packages.chroot/
       - name: 校验 XML 语法
         run: |
           apt-get install -y libxml2-utils

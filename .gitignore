@@ -22,3 +22,6 @@
 # 本地临时产物（一律放在项目内，不提交）
 /tmp/
 /.cache/
+# live-build 的本地 deb（只在 CI 里由 cargo-deb 生成，不提交）
+/iso/config/packages.chroot/*.deb
+

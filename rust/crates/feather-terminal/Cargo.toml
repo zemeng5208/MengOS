@@ -14,3 +14,11 @@ gtk = { version = "0.11.5", package = "gtk4" }
 # gtk_v4_18：vte4 0.10 的生成代码用到 gtk::Accessible 等 v4_18 才导出的类型；
 # Debian trixie 自带 GTK 4.18.6，满足该特性对系统库的要求。
 vte4 = { version = "0.10.0", features = ["gtk_v4_18"] }
+
+[package.metadata.deb]
+maintainer = "zemeng5208"
+depends = "$auto, zsh"
+assets = [
+    ["target/release/feather-terminal", "usr/bin/feather-terminal", "755"],
+    ["assets/mengos-terminal.desktop", "usr/share/applications/mengos-terminal.desktop", "644"],
+]
