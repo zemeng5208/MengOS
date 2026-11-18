@@ -28,6 +28,12 @@ jobs:
           cargo deb -p feather-terminal
           echo "== 生成的 deb =="
           ls -l target/debian/
+      - name: 显示 deb 里的文件与依赖
+        run: |
+          echo "== dpkg-deb -c（文件清单）=="
+          dpkg-deb -c target/debian/*.deb
+          echo "== dpkg-deb -I（控制信息）=="
+          dpkg-deb -I target/debian/*.deb
       - name: 上传 .deb
         uses: actions/upload-artifact@v4
         with:
@@ -63,6 +69,14 @@ jobs:
         env:
           MENGOS_VERSION: 0.0.1-dev.${{ github.run_number }}
         run: bash scripts/build-iso.sh
+      - name: 核对 feather-terminal 已进入包清单
+        run: |
+          echo "== 包清单里与 feather-terminal 相关的行 =="
+          grep -in 'feather-terminal' dist/*.packages.txt || true
+          echo "== 包清单总行数 =="
+          wc -l dist/*.packages.txt
+          echo "== 包清单前 3 行（说明格式）=="
+          head -3 dist/*.packages.txt
       - name: 上传构建日志
         if: always()
         uses: actions/upload-artifact@v4
