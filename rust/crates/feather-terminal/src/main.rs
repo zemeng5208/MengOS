@@ -69,7 +69,7 @@ fn install_shortcuts(window: &gtk::ApplicationWindow, terminal: &vte4::Terminal)
         }
 
         if keyval == gtk::gdk::Key::C {
-            terminal.copy_clipboard_format(vte4::Format::TEXT);
+            terminal.copy_clipboard_format(vte4::Format::Text);
             return gtk::glib::Propagation::Stop;
         }
         if keyval == gtk::gdk::Key::V {
