@@ -1,14 +1,45 @@
 #!/bin/sh
 # MengOS：把默认壁纸应用到本次会话里实际存在的所有显示器/工作区。
-# 原因：xfdesktop 的壁纸是按 XRandR 输出名（例如 VMware 上的 Virtual-1）存键的，
-# 而我们无法预知具体机器的输出名，所以登录时按实际键名补设一次。
+# 原因：xfdesktop 的壁纸按 XRandR 输出名存键（VMware 下通常是 Virtual-1），
+# 单靠系统级 XML 里的 monitor0 不一定命中，所以登录时按实际输出名补设一遍。
 WALLPAPER=/usr/share/backgrounds/mengos/default.svg
 [ -f "$WALLPAPER" ] || exit 0
 command -v xfconf-query >/dev/null 2>&1 || exit 0
+
+# 先尝试直接改，键不存在时再创建（-n 对已存在的键会报错，所以两步都试）
+set_prop() {
+    # $1=属性路径 $2=类型 $3=值
+    xfconf-query -c xfce4-desktop -p "$1" -s "$3" 2>/dev/null && return 0
+    xfconf-query -c xfce4-desktop -p "$1" -n -t "$2" -s "$3" 2>/dev/null && return 0
+    return 0
+}
+
+set_monitor() {
+    mon="$1"
+    ws=0
+    while [ "$ws" -le 3 ]; do
+        base="/backdrop/screen0/monitor${mon}/workspace${ws}"
+        set_prop "${base}/last-image" string "$WALLPAPER"
+        set_prop "${base}/image-style" int 5
+        ws=$((ws + 1))
+    done
+}
+
+# 1) 按 xrandr 报告的真实输出名建键（VMware 下通常是 Virtual-1）
+if command -v xrandr >/dev/null 2>&1; then
+    for mon in $(xrandr --query 2>/dev/null | awk '/ connected/{print $1}'); do
+        set_monitor "$mon"
+    done
+fi
+
+# 2) xfdesktop 对单屏有时用 monitor0 作键名
+set_monitor 0
+
+# 3) 兜底：把所有已经存在的 last-image 键都改成我们的壁纸
 for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/backdrop/screen[0-9]*/monitor[^/]*/workspace[0-9]*/last-image$'); do
-  xfconf-query -c xfce4-desktop -p "$p" -s "$WALLPAPER" 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p "$p" -s "$WALLPAPER" 2>/dev/null || true
 done
-for p in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '/backdrop/screen[0-9]*/monitor[^/]*/workspace[0-9]*/image-style$'); do
-  xfconf-query -c xfce4-desktop -p "$p" -s 5 2>/dev/null || true
-done
+
+# 4) 让 xfdesktop 立刻重新读取设置
+xfdesktop --reload >/dev/null 2>&1 || true
 exit 0
