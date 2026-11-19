@@ -55,6 +55,29 @@ if [ -f "$UCONF" ]; then
   fi
   echo "--- 修改后的 userShell ---"
   grep -n 'userShell' "$UCONF"
+
+  # 去掉 libpwquality 字典校验。
+  # 依据：Debian 的 users.conf 写的是 libpwquality: [minlen=0, minclass=0]，但 Calamares 3.3.14 的
+  # src/modules/users/CheckPWQuality.cpp 里 pwquality_check() 仍会跑 cracklib 字典检查
+  # （PWQ_ERROR_CRACKLIB_CHECK → 「The password fails the dictionary check」），且要求评分
+  # >= 40（arbitrary_minimum_strength），所以普通密码过不了校验、「下一步」按钮一直是灰的。
+  # 删掉这个键后 requirement_count 为 0，Calamares 不再添加该检查，只剩长度检查。
+  echo "--- 修改前的 passwordRequirements ---"
+  grep -n 'passwordRequirements\|minLength\|maxLength\|libpwquality\|minlen\|minclass' "$UCONF" || true
+  awk '
+    /^[[:space:]]*libpwquality:/ { skip = 1; next }
+    skip && /^[[:space:]]*-/ { next }
+    { skip = 0; print }
+  ' "$UCONF" > "$UCONF.new" && mv "$UCONF.new" "$UCONF"
+  # minLength: -1 表示不加长度检查；改成 1 只拒绝空密码
+  sed -i 's/minLength: -1/minLength: 1/' "$UCONF"
+  echo "--- 修改后的 passwordRequirements ---"
+  grep -n 'passwordRequirements\|minLength\|maxLength\|libpwquality\|minlen\|minclass' "$UCONF" || true
+  if grep -q 'libpwquality' "$UCONF"; then
+    echo "WARNING: libpwquality 仍然存在"
+  else
+    echo "OK: libpwquality 已移除，剩余行数 $(wc -l < "$UCONF")"
+  fi
 else
   echo "WARNING: 找不到 $UCONF，未设置 userShell"
 fi
