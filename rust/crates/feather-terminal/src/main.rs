@@ -120,7 +120,7 @@ fn install_context_menu(window: &gtk::ApplicationWindow, terminal: &vte4::Termin
     let reset_action = gtk::gio::SimpleAction::new("reset", None);
     let terminal_for_reset = terminal.clone();
     reset_action.connect_activate(move |_, _| {
-        terminal_for_reset.reset();
+        terminal_for_reset.reset(true, true);
     });
 
     window.add_action(&copy_action);
