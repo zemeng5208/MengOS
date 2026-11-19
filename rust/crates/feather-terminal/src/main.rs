@@ -52,6 +52,7 @@ fn build_ui(application: &gtk::Application) {
     });
 
     install_shortcuts(&window, &terminal);
+    install_context_menu(&window, &terminal);
     spawn_shell(&terminal);
 
     window.present();
@@ -81,6 +82,75 @@ fn install_shortcuts(window: &gtk::ApplicationWindow, terminal: &vte4::Terminal)
     });
 
     window.add_controller(controller);
+}
+
+/// 右键菜单：复制 / 粘贴 / 全选 / 清屏。
+///
+/// VTE4 不提供默认的右键菜单，必须由应用自己建，所以这里用 `PopoverMenu` 实现；
+/// 弹出前会检查剪贴板里有没有文本，没有文本时把「粘贴」置灰（与常见终端一致）。
+fn install_context_menu(window: &gtk::ApplicationWindow, terminal: &vte4::Terminal) {
+    let menu = gtk::gio::Menu::new();
+    menu.append(Some("复制"), Some("win.copy"));
+    menu.append(Some("粘贴"), Some("win.paste"));
+    menu.append(Some("全选"), Some("win.select-all"));
+    menu.append(Some("清屏"), Some("win.reset"));
+
+    let popover = gtk::PopoverMenu::from_model(Some(&menu));
+    popover.set_parent(terminal);
+    popover.set_has_arrow(false);
+
+    let copy_action = gtk::gio::SimpleAction::new("copy", None);
+    let terminal_for_copy = terminal.clone();
+    copy_action.connect_activate(move |_, _| {
+        terminal_for_copy.copy_clipboard_format(vte4::Format::Text);
+    });
+
+    let paste_action = gtk::gio::SimpleAction::new("paste", None);
+    let terminal_for_paste = terminal.clone();
+    paste_action.connect_activate(move |_, _| {
+        terminal_for_paste.paste_clipboard();
+    });
+
+    let select_all_action = gtk::gio::SimpleAction::new("select-all", None);
+    let terminal_for_select_all = terminal.clone();
+    select_all_action.connect_activate(move |_, _| {
+        terminal_for_select_all.select_all();
+    });
+
+    let reset_action = gtk::gio::SimpleAction::new("reset", None);
+    let terminal_for_reset = terminal.clone();
+    reset_action.connect_activate(move |_, _| {
+        terminal_for_reset.reset();
+    });
+
+    window.add_action(&copy_action);
+    window.add_action(&paste_action);
+    window.add_action(&select_all_action);
+    window.add_action(&reset_action);
+
+    // 右键把菜单弹在鼠标位置。用捕获阶段，避免 VTE 自己先吃掉按键/点击。
+    let gesture = gtk::GestureClick::new();
+    gesture.set_button(gtk::gdk::BUTTON_SECONDARY);
+    gesture.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let popover_for_click = popover.clone();
+    gesture.connect_pressed(move |gesture, _n_press, x, y| {
+        let rect = gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1);
+        popover_for_click.set_pointing_to(Some(&rect));
+        popover_for_click.popup();
+        gesture.set_state(gtk::EventSequenceState::Claimed);
+    });
+    terminal.add_controller(gesture);
+
+    let paste_action_for_show = paste_action.clone();
+    let clipboard = window.clipboard();
+    popover.connect_show(move |_| {
+        let action = paste_action_for_show.clone();
+        let clipboard = clipboard.clone();
+        gtk::glib::spawn_future_local(async move {
+            let has_text = matches!(clipboard.read_text_future().await, Ok(Some(_)));
+            action.set_enabled(has_text);
+        });
+    });
 }
 
 /// 用 VTE 的 `spawn_async` 在伪终端里启动真实的 shell，工作目录为用户主目录。
