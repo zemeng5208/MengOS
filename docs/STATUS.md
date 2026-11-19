@@ -13,9 +13,21 @@
 | T8 FeatherTerminal 第一版 | 已完成（用户暂缓验收） | 2026-11-18 | 2f5cdee（squash 合并） | 新 crate `feather-terminal`：`vte4 0.10.0` + `gtk4 0.11.5`，`cargo tree -i gtk4` 只有一个版本；`spawn_async` 启动 `/usr/bin/zsh`（回退 `$SHELL`→`/bin/bash`），shell 退出关窗，`Ctrl+Shift+C/V` 走 VTE 自带剪贴板；CI 全绿（release 编译 49.96s、clippy/格式/测试均通过），artifact `feather-terminal` 220,260 字节（解压后二进制 556,744 字节）；run 44213101804 |
 | T9 把 FeatherTerminal 装进 ISO | 已完成（用户暂缓验收） | 2026-11-18 | be5ad41（squash 合并） | `cargo-deb 3.8.0` 打出 `feather-terminal_0.0.1-1_amd64.deb`（156,204 字节）：内含 `./usr/bin/feather-terminal`（394,104 字节，0755）与 `./usr/share/applications/mengos-terminal.desktop`（210 字节）；控制信息 `Depends: libc6 …, libglib2.0-0t64 …, libgtk-4-1 …, libvte-2.91-gtk4-0 …, zsh`；`build-iso.yml` 拆成 `build-deb` + `build-iso`（`needs`）两个 job，deb 经 artifact 落到 `iso/config/packages.chroot/`；`.packages.txt` 原文 `106:feather-terminal\t0.0.1-1`（共 1359 行）；hook `0300-mengos-terminal-icon` 输出 `/etc/skel/Desktop/mengos-terminal.desktop` 为 `-rwxr-xr-x 210`，且 hook 运行时 `/home` 为空（Live 用户在其后创建，会继承图标）；**最终交付** `MengOS-0.0.1-dev.14-amd64.iso` 1.8G，SHA256 `99eb6704c73903dbb04a8387758498ceced3ec7e65a15e6ce8dc509e0fdfcd2b`（run#14 / 44217405996，main @ `be5ad41`，两个 job 均 success；分支上另有一次 `dev.13`，SHA256 `a9c8f23e6ab93c886d5bb58d517a1b79a1bf51a11e9b490535e3ee71b85c9de9`） |
 
+## 验收修复记录（2026-11-19，用户实测 dev.14 后提出）
+
+用户反馈三个问题，均已修复并合并（PR #9 → `31eed89`，随后 `b9f4c14` 删掉临时诊断 hook）：
+
+| 问题 | 根因（有原文依据） | 修法 |
+|---|---|---|
+| 桌面壁纸还是 Debian 自带的，不是 MengOS 的浅蓝渐变 | 构建诊断证明 ISO 里壁纸文件、系统级/用户级 `xfce4-desktop.xml`、`librsvg2-common 2.60.0`、`libpixbufloader_svg.so` 全都在；问题在运行时键名——VMware 下 XRandR 输出名是 `Virtual-1`，系统级 XML 只写了 `monitor0`，旧脚本又只改「已存在」的键，首次登录时匹配为空 | 脚本按 `xrandr` 输出名建键（`-n -t string`）+ 补 `monitor0` + 兜底改所有已存在键 + `xfdesktop --reload`；自动启动延迟跑两遍；新增 `/etc/skel/.config/.../xfce4-desktop.xml` |
+| 终端右键没有菜单，无法粘贴 | VTE4 不提供默认右键菜单，必须由应用自建，T8 漏了 | `feather-terminal` 增加 `PopoverMenu` + `GestureClick`（捕获阶段）实现「复制/粘贴/全选/清屏」，弹出前用 `read_text_future()` 检查剪贴板，无文本时「粘贴」置灰 |
+| 安装器建用户时密码过不了字典校验，「下一步」一直灰着 | Debian 的 `users.conf` 写 `libpwquality: [minlen=0, minclass=0]`，但 Calamares 3.3.14 `CheckPWQuality.cpp` 里 `pwquality_check()` 仍跑 cracklib 字典检查并要求评分 ≥ 40，`Config::passwordStatus()` 在 `requireStrongPasswords` 为真时判为 `Invalid` | hook 删掉 `libpwquality` 及其列表项，`minLength` 由 `-1` 改为 `1`（只拒绝空密码）；构建日志原文：`19:passwordRequirements:` / `21:minLength: 1` / `OK: libpwquality 已移除，剩余行数 24` |
+
+验证：`rust` 工作流 run 44489404745 success（release 编译 52.86s、clippy `-D warnings` 通过、`7 passed; 0 failed`）；`build-iso` run 44489404730 success（`dev.16`）。合并后在 main 上重建：run 44491512287（`run#18`，两个 job 均 success）产出 **`MengOS-0.0.1-dev.18-amd64.iso`**，1.8G，SHA256 `98a22db09e76a7d4b30a82085762df0ea665f76cfeff14726af38fdc905f0a7e`；日志里已无诊断 hook 输出，`.packages.txt` 仍是 `106:feather-terminal	0.0.1-1`。
+
 ## 当前任务
 
-第一批任务 **T0–T9 已全部完成**（T9 合并提交 `be5ad41`），等待用户统一验收。
+第一批任务 **T0–T9 已完成**；验收中发现的三个问题（壁纸、终端右键菜单、安装器密码）已修复并合并，等待用户用 `dev.18` 复验。
 
 ## 遇到的问题
 
@@ -29,7 +41,10 @@
 - T8 共失败 3 次，原因都不是猜的，均按 CI 原文修：①`cargo fmt --check` 要求把 `let ctrl_shift = …` 合成一行；②`error[E0425]: cannot find type 'Accessible' in crate 'gtk'`——gtk4 0.11.5 的 `auto/mod.rs` 里 `Accessible` 被 `#[cfg(feature = "v4_10")]` 门控，而 vte4 的生成代码无条件引用它，故给 vte4 打开 `gtk_v4_18` 特性；③`error[E0599]: no variant named 'TEXT' for enum 'vte4::Format'`——gtk-rs 0.11 的枚举变体是 `UpperCamelCase`，改成 `vte4::Format::Text`。
 - T9 期间 `build-iso` 一共跑了 4 次，逐个对应：run#11 → `dev.11`（T6 合并到 main 触发）、run#12 → `dev.12`（T9 首个提交）、run#13 → `dev.13`（T9 加了「显示 deb 内容 / 核对包清单」两个验证步骤）、run#14 → `dev.14`（T9 合并到 main，**最终交付给用户验收的 ISO**）。多跑的原因：`.packages.txt` 只有 41K，却和 1.8G 的 ISO 在同一个 artifact 里，为拿到任务书要求的「包清单那一行原文」而不下载整包，改为在 CI 里 `grep` 后打印，因此多推了一次。
 - 每次 push 到带 PR 的分支会同时触发 `push` 与 `pull_request`，`build-iso` 因此会跑两遍（每遍约 13 分钟）。若以后觉得浪费，可在 `build-iso.yml` 去掉 `pull_request` 触发。
+- 验收发现的三个问题都属于「文件在 ISO 里、但运行时没生效」，教训是：**配置类改动必须有构建时诊断**（本轮临时加了 `0310-mengos-diag` hook，把 chroot 里的壁纸文件、系统级/用户级 xfconf、SVG 加载器、桌面快捷方式、VMware 剪贴板文件全部打印出来，才定位到是 `monitor0` 与实际输出名 `Virtual-1` 不匹配）。诊断 hook 用完已删。
+- `vte4` 的 `reset()` 需要两个参数（`reset(clear_tabstops, clear_history)`），我第一版写成无参，靠 docs.rs 0.10.0 的签名核对后修掉，没让这轮构建失败。
+- 用户反馈「终端里粘贴不了」时，先用 `open-vm-tools`/`open-vm-tools-desktop 2:12.5.0-2+deb13u1` 的安装日志与 Debian 文件清单确认虚拟机侧齐全（含 `/etc/xdg/autostart/vmware-user.desktop`、`/usr/bin/vmware-user-suid-wrapper`），再把范围收敛到「终端没有右键菜单」这个真实缺陷上。
 
 ## 下一步要执行的命令
 
-第一批任务已收尾。等待用户在 VMware 里用最新的 `MengOS-0.0.1-dev.13-amd64.iso` 统一验收（T3–T9 的清单一次性跑）；如某项不通过，按任务书第 1.6 节格式回报编号+截图，再开分支修。
+等待用户在 VMware 里用 **`MengOS-0.0.1-dev.18-amd64.iso`**（Actions run#18 → Artifacts → `mengos-iso`）复验这三点：① 桌面壁纸是不是浅蓝渐变、② 终端右键有没有菜单且能粘贴、③ 安装器里密码能不能通过校验并建出用户。其余 T3–T9 的验收清单照旧一次性跑；哪项不通过就发编号+截图，再开分支修。
