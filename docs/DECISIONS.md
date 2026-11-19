@@ -29,3 +29,8 @@
 | 2026-11-18 | 代码里用 `vte4::Format::Text`（不是 `TEXT`） | gtk-rs 0.11 起枚举变体改为 UpperCamelCase，CI 编译错误与编译器建议都证实这点 |
 | 2026-11-18 | `spawn_async` 的 `envv` 显式传 `std::env::vars()` 拼出的环境 | vte4 0.10 中该参数类型是 `&[&str]`（不是 `Option`），传空切片可能给子进程一个空环境，导致 shell 没有 PATH/HOME |
 | 2026-11-18 | `rust.yml` 增加「安装 GTK4/VTE4 开发库 + release 编译 + 上传二进制 artifact」 | 任务书 T8 要求；`cargo build` 需要 `libgtk-4-dev`/`libvte-2.91-gtk4-dev`/`pkg-config` |
+| 2026-11-18 | 用 `cargo-deb`（`cargo install cargo-deb --locked`，CI 实测 3.8.0）打包，`maintainer = "zemeng5208"`（= 用户 GitHub 用户名）、`depends = "$auto, zsh"` | 任务书 T9 第 1 步；`$auto` 由 cargo-deb 用 ldd 推导库依赖，实测产出 `libc6/libglib2.0-0t64/libgtk-4-1/libvte-2.91-gtk4-0` 再并上 `zsh` |
+| 2026-11-18 | deb 的 asset 源路径统一写 `target/release/feather-terminal` | cargo-deb 文档规定：即使是 workspace 也一律写 `target/release/` 前缀；实测 `cargo deb -p feather-terminal` 确实从该路径取到二进制 |
+| 2026-11-18 | `build-iso.yml` 拆成 `build-deb`（rust 容器）与 `build-iso`（debian 容器，`needs: build-deb`），deb 通过 `download-artifact` 落到 `iso/config/packages.chroot/` | live-build 会自动安装该目录下所有 deb；两个 job 各用合适镜像，避免在 debian 容器里额外装 Rust 工具链 |
+| 2026-11-18 | 桌面图标：hook `0300-mengos-terminal-icon` 用 `install -m 0755` 把 `.desktop` 放进 `/etc/skel/Desktop/`（若 `/home/user`、`/home/live` 已存在也各放一份） | 任务书 T9 第 4 步；实测 hook 运行时 `/home` 为空 → Live 用户在其后创建并继承 `/etc/skel`，Live 桌面会显示图标；可执行位用于尽量避免 Xfce 的「不受信任的启动器」提示 |
+| 2026-11-18 | `.gitignore` 忽略 `/iso/config/packages.chroot/*.deb` | deb 只在 CI 里由 cargo-deb 生成，不提交进 Git |
