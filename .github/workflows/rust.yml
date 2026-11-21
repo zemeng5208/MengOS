@@ -118,6 +118,8 @@ jobs:
         working-directory: rust
     steps:
       - uses: actions/checkout@v4
+      - name: 让 gh 能在容器里识别仓库（避免 git dubious ownership）
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: 安装 GTK4 / VTE4 开发库与 gh
         run: |
           apt-get update
@@ -138,6 +140,8 @@ jobs:
       - name: 创建或更新 dev-latest 预发布
         env:
           GH_TOKEN: ${{ github.token }}
+          # 显式指定仓库，gh 就不必依赖 git 上下文
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release view dev-latest >/dev/null 2>&1 || \
             gh release create dev-latest --prerelease --title "dev-latest" \
