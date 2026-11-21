@@ -1,11 +1,18 @@
 name: rust
 on:
+  # 只在 main 上推送时跑一次；PR 分支的推送由下面的 pull_request 触发，
+  # 这样一次 PR 推送不会同时触发 push 与 pull_request 两份运行。
   push:
-    branches: ["**"]
+    branches: [main]
     paths: ["rust/**", ".github/workflows/rust.yml"]
   pull_request:
     paths: ["rust/**", ".github/workflows/rust.yml"]
   workflow_dispatch:
+
+env:
+  # 编译时注入的版本号：FeatherTerminal 的窗口标题会显示它（没有注入时显示 dev）
+  MENGOS_BUILD: 0.0.1+${{ github.run_number }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -40,3 +47,105 @@ jobs:
         with:
           name: feather-terminal
           path: rust/target/release/feather-terminal
+
+  # 在虚拟显示器里启动 FeatherTerminal，输入一条命令并截图。
+  # 截图只证明程序能启动、界面大致正确，不代替用户验收。
+  gui-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: rust:1.100.0-trixie
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装开发库与截图/自动化输入工具
+        run: |
+          apt-get update
+          apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config \
+            xvfb xauth imagemagick xdotool dbus-x11 fonts-noto-cjk zsh openbox
+      - name: 编译 release 版 FeatherTerminal
+        run: cargo build --release -p feather-terminal
+      - name: 虚拟显示器里启动、输入命令、截图
+        run: |
+          export GSK_RENDERER=cairo
+          export NO_AT_BRIDGE=1
+          export GDK_BACKEND=x11
+          xvfb-run -a -s "-screen 0 1280x800x24" bash -euc '
+            openbox &
+            sleep 2
+            ./target/release/feather-terminal &
+            APP=$!
+            sleep 8
+            if ! kill -0 "$APP" 2>/dev/null; then
+              echo "ERROR: FeatherTerminal 在 8 秒内退出了（启动即崩溃）"
+              exit 1
+            fi
+            import -window root shot-start.png
+            WIN=$(xdotool search --sync --name "FeatherTerminal" | head -n1)
+            echo "找到窗口：$WIN"
+            xdotool windowactivate --sync "$WIN" || xdotool windowfocus --sync "$WIN" || true
+            sleep 1
+            xdotool type --delay 100 "echo hello-from-ci"
+            xdotool key Return
+            sleep 3
+            import -window root shot-echo.png
+            kill "$APP" || true
+          '
+          ls -l shot-start.png shot-echo.png
+      - name: 上传截图
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke
+          path: |
+            rust/shot-start.png
+            rust/shot-echo.png
+          if-no-files-found: error
+
+  # 只在 main 上推送时运行：把最新的 FeatherTerminal .deb 传到 dev-latest 预发布，
+  # 这样用户可以用 mengos-update-terminal 只下载约 200KB 的 deb，不用下 1.8G 的 ISO。
+  publish-deb:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: rust:1.100.0-trixie
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 GTK4 / VTE4 开发库与 gh
+        run: |
+          apt-get update
+          apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config gh
+      - name: 安装 cargo-deb
+        run: cargo install cargo-deb --locked
+      - name: 打包 deb（版本号 0.0.1+<CI 运行号>）
+        run: |
+          VERSION="0.0.1+${GITHUB_RUN_NUMBER}"
+          echo "deb 版本号：$VERSION"
+          cargo deb -p feather-terminal --deb-version "$VERSION" \
+            --output target/debian/feather-terminal_latest_amd64.deb
+          cp target/debian/feather-terminal_latest_amd64.deb \
+             "target/debian/feather-terminal_${VERSION}_amd64.deb"
+          ls -l target/debian/*.deb
+          echo "== deb 控制信息 =="
+          dpkg-deb -I target/debian/feather-terminal_latest_amd64.deb | sed -n '1,14p'
+      - name: 创建或更新 dev-latest 预发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view dev-latest >/dev/null 2>&1 || \
+            gh release create dev-latest --prerelease --title "dev-latest" \
+              --notes "自动构建，仅供开发验收：最新 FeatherTerminal .deb（用 mengos-update-terminal 安装）"
+          gh release upload dev-latest \
+            target/debian/feather-terminal_latest_amd64.deb \
+            "target/debian/feather-terminal_0.0.1+${GITHUB_RUN_NUMBER}_amd64.deb" \
+            --clobber
+          echo "== release 里的文件 =="
+          gh release view dev-latest --json assets \
+            --jq '.assets[] | "\(.name)  \(.size) bytes"'

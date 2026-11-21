@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# 作用：下载并安装最新的 FeatherTerminal 开发版（来自 GitHub 的 dev-latest 预发布）
+set -euo pipefail
+URL="https://github.com/zemeng5208/MengOS/releases/download/dev-latest/feather-terminal_latest_amd64.deb"
+TMP="$(mktemp -d)"
+echo "正在下载：$URL"
+wget -q --show-progress -O "$TMP/feather-terminal.deb" "$URL"
+sudo apt install -y "$TMP/feather-terminal.deb"
+dpkg -s feather-terminal | grep -E '^(Package|Version):'
+rm -rf "$TMP"
+echo "更新完成。请关闭所有 FeatherTerminal 窗口后重新打开。"

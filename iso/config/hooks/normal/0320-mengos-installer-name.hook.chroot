@@ -1,0 +1,54 @@
+#!/bin/sh
+# 作用：把 Debian 自带的「Install Debian」安装器图标改名为「安装 MengOS」。
+# 只改 .desktop 里的显示名与说明，图标文件继续用系统自带的，不自绘。
+set -e
+
+echo "=== [T10] 安装器图标来源 ==="
+echo "--- dpkg -L calamares-settings-debian | grep desktop ---"
+dpkg -L calamares-settings-debian | grep -i 'desktop' || true
+
+echo "--- 生成 Live 桌面图标的脚本 ---"
+if [ -f /usr/bin/add-calamares-desktop-icon ]; then
+    cat /usr/bin/add-calamares-desktop-icon
+else
+    echo "（没有 /usr/bin/add-calamares-desktop-icon）"
+fi
+
+echo "--- 当前所有提到 Install Debian 的 .desktop ---"
+FOUND="$(grep -rl 'Install Debian' /usr/share/applications /etc/skel 2>/dev/null || true)"
+if [ -z "$FOUND" ]; then
+    echo "没有找到包含 'Install Debian' 的 .desktop，下面按已知路径兜底"
+    FOUND="/usr/share/applications/calamares-install-debian.desktop"
+fi
+echo "$FOUND"
+
+echo "=== [T10] 修改显示名 ==="
+for f in $FOUND; do
+    [ -f "$f" ] || continue
+    echo "处理：$f"
+    echo "--- 修改前 ---"
+    grep -n -E '^(Name|Comment|Icon|Exec)' "$f" || true
+
+    sed -i 's/^Name=.*/Name=安装 MengOS/' "$f"
+    if grep -q '^Name\[zh_CN\]=' "$f"; then
+        sed -i 's/^Name\[zh_CN\]=.*/Name[zh_CN]=安装 MengOS/' "$f"
+    else
+        sed -i '/^Name=安装 MengOS/a Name[zh_CN]=安装 MengOS' "$f"
+    fi
+    if grep -q '^Comment=' "$f"; then
+        sed -i 's/^Comment=.*/Comment=将 MengOS 安装到硬盘/' "$f"
+    else
+        sed -i '/^Name\[zh_CN\]=安装 MengOS/a Comment=将 MengOS 安装到硬盘' "$f"
+    fi
+
+    echo "--- 修改后 ---"
+    grep -n -E '^(Name|Comment|Icon|Exec)' "$f" || true
+done
+
+echo "=== [T10] 最终校验 ==="
+if [ -f /usr/share/applications/calamares-install-debian.desktop ]; then
+    grep -n -E '^(Name|Comment)' /usr/share/applications/calamares-install-debian.desktop
+    echo "OK: 安装器图标已改名为「安装 MengOS」"
+else
+    echo "警告：/usr/share/applications/calamares-install-debian.desktop 不存在"
+fi
