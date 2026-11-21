@@ -12,6 +12,13 @@
 | T7 Rust 工程骨架 | 已完成（用户暂缓验收） | 2026-11-17 | 7f9f2fe（squash 合并） | `rust-toolchain.toml` 锁 1.100.0；工作区 + `feather-core`（`TaskId`/`BotId`/`TaskState` 与状态机）；CI 实测 `cargo 1.100.0`、`rustc 1.100.0`、`7 passed; 0 failed`、clippy 与 `cargo fmt --check` 无输出；`Cargo.lock` 已提交（lock version 4）；run 44108051242 |
 | T8 FeatherTerminal 第一版 | 已完成（用户暂缓验收） | 2026-11-18 | 2f5cdee（squash 合并） | 新 crate `feather-terminal`：`vte4 0.10.0` + `gtk4 0.11.5`，`cargo tree -i gtk4` 只有一个版本；`spawn_async` 启动 `/usr/bin/zsh`（回退 `$SHELL`→`/bin/bash`），shell 退出关窗，`Ctrl+Shift+C/V` 走 VTE 自带剪贴板；CI 全绿（release 编译 49.96s、clippy/格式/测试均通过），artifact `feather-terminal` 220,260 字节（解压后二进制 556,744 字节）；run 44213101804 |
 | T9 把 FeatherTerminal 装进 ISO | 已完成（用户暂缓验收） | 2026-11-18 | be5ad41（squash 合并） | `cargo-deb 3.8.0` 打出 `feather-terminal_0.0.1-1_amd64.deb`（156,204 字节）：内含 `./usr/bin/feather-terminal`（394,104 字节，0755）与 `./usr/share/applications/mengos-terminal.desktop`（210 字节）；控制信息 `Depends: libc6 …, libglib2.0-0t64 …, libgtk-4-1 …, libvte-2.91-gtk4-0 …, zsh`；`build-iso.yml` 拆成 `build-deb` + `build-iso`（`needs`）两个 job，deb 经 artifact 落到 `iso/config/packages.chroot/`；`.packages.txt` 原文 `106:feather-terminal\t0.0.1-1`（共 1359 行）；hook `0300-mengos-terminal-icon` 输出 `/etc/skel/Desktop/mengos-terminal.desktop` 为 `-rwxr-xr-x 210`，且 hook 运行时 `/home` 为空（Live 用户在其后创建，会继承图标）；**最终交付** `MengOS-0.0.1-dev.14-amd64.iso` 1.8G，SHA256 `99eb6704c73903dbb04a8387758498ceced3ec7e65a15e6ce8dc509e0fdfcd2b`（run#14 / 44217405996，main @ `be5ad41`，两个 job 均 success；分支上另有一次 `dev.13`，SHA256 `a9c8f23e6ab93c886d5bb58d517a1b79a1bf51a11e9b490535e3ee71b85c9de9`） |
+| T10 收尾与提速 | 已完成（等待验收） | 2026-11-21 | bbcc68e（squash 合并）、bb7cc45（修 publish-deb） | ① 分支清理：`git fetch --prune` 后远端只剩 `origin/main`（`task/T2-ci`…`task/T9-terminal-iso`、`fix/acceptance-1`、`tmp/T6-probe` 在之前 squash 合并时已被 `--delete-branch` 删除），本地删掉 `tmp/T6-probe`（was `f39a318`），无未合并分支；② `build-iso` 的 `push` 触发自 T3 起就只限 `main`，PR 推送只触发一次，无需修改；顺手把 `rust.yml` 的 `branches: ["**"]` 收窄为 `[main]`；③ 安装器改名：CI 实测 `.desktop` 路径 `/usr/share/applications/calamares-install-debian.desktop`，由 `/etc/xdg/autostart/calamares-desktop-icon.desktop` 调 `/usr/bin/add-calamares-desktop-icon` 复制到桌面；hook 改名后日志原文 `4:Name=安装 MengOS`、`5:Name[zh_CN]=安装 MengOS`、`8:Comment=将 MengOS 安装到硬盘`、`OK: 安装器图标已改名为「安装 MengOS」`；④ deb 快速通道：`dev-latest` 预发布已建（prerelease=true），含 `feather-terminal_latest_amd64.deb` 与 `feather-terminal_0.0.1+29_amd64.deb`，各 169,408 字节；ISO 内包清单原文 `106:feather-terminal	0.0.1+21`；⑤ `gui-smoke`：Xvfb + openbox + import + xdotool，截图标题 `FeatherTerminal 0.0.1+26`，输入 `echo hello-from-ci` 后回显 `hello-from-ci`；⑥ 新 ISO `MengOS-0.0.1-dev.21-amd64.iso` 1.8G，SHA256 `9c253e9f3d6821a0ced443291708d65fabdefc5846bc7610beede740769a21b6`（run#21 / 44919431401，两个 job 均 success） |
+| T11 多标签 + 搜索 + 当前目录跟踪 | 未开始 | — | — | — |
+| T12 右侧侧栏骨架 | 未开始 | — | — | — |
+| T13 侧栏：文件树与预览 | 未开始 | — | — | — |
+| T14 侧栏：文件更改（Git Diff） | 未开始 | — | — | — |
+| T15 侧栏：网络连接 | 未开始 | — | — | — |
+| T16 侧栏：个人资料 + 第二批收尾 | 未开始 | — | — | — |
 
 ## 验收修复记录（2026-11-19，用户实测 dev.14 后提出）
 
@@ -27,7 +34,7 @@
 
 ## 当前任务
 
-第一批任务 **T0–T9 已完成**；验收中发现的三个问题（壁纸、终端右键菜单、安装器密码）已修复并合并，等待用户用 `dev.18` 复验。
+第二批任务已开始：**T10 已完成**（合并 `bbcc68e`；`bb7cc45` 修好 `publish-deb`），等待用户用 `dev.21` 完整验收一次（A0–A11）。通过后开始 T11（多标签 + 搜索 + 当前目录跟踪，只改 rust，验收时用 `mengos-update-terminal` 更新 .deb，不用下 ISO）。
 
 ## 遇到的问题
 
@@ -45,6 +52,12 @@
 - `vte4` 的 `reset()` 需要两个参数（`reset(clear_tabstops, clear_history)`），我第一版写成无参，靠 docs.rs 0.10.0 的签名核对后修掉，没让这轮构建失败。
 - 用户反馈「终端里粘贴不了」时，先用 `open-vm-tools`/`open-vm-tools-desktop 2:12.5.0-2+deb13u1` 的安装日志与 Debian 文件清单确认虚拟机侧齐全（含 `/etc/xdg/autostart/vmware-user.desktop`、`/usr/bin/vmware-user-suid-wrapper`），再把范围收敛到「终端没有右键菜单」这个真实缺陷上。
 
+- T10 的 `publish-deb` 第一次在 main 上失败，日志原文：`failed to run git: fatal: detected dubious ownership in repository at '/__w/MengOS/MengOS'`——容器里 checkout 的属主与运行用户不同，`gh` 调用 git 时被 git 拒绝。修法：加一步 `git config --global --add safe.directory "$GITHUB_WORKSPACE"`，并给 gh 步骤设 `GH_REPO`；之后 run#29 的 `check`/`gui-smoke`/`publish-deb` 全 success。
+- 发现 `build-iso.yml` 的 `build-deb` 没有注入 `MENGOS_BUILD`，ISO 里预装的 FeatherTerminal 标题会显示 `dev`（与验收 A6 的「显示 `0.0.1+<数字>`」不符）；已在 `build-deb` 加 `MENGOS_BUILD` 与 `--deb-version`，实测包清单 `106:feather-terminal	0.0.1+21`。
+- 分支清理时发现远端 `task/T*`、`fix/acceptance-1`、`tmp/T6-probe` 早已被之前的 `gh pr merge --delete-branch` 删除，`git fetch --prune` 只是清掉本地残留引用；没有未合并的分支。
+- 更正上一轮汇报的一处说法：`build-iso.yml` 的 `push` 触发自 T3 起就只限 `main`，PR 推送只触发一次 build-iso；真正会双跑的是 `rust.yml`（`branches: ["**"]` + `pull_request`），本轮已收窄为 `[main]`。
+- `gui-smoke` 在 Xvfb 里需要窗口管理器才能把键盘焦点交给窗口：额外装了 `openbox`，先 `xdotool windowactivate` 再 `xdotool type`，截图里能看到 `hello-from-ci` 的回显。
+
 ## 下一步要执行的命令
 
-等待用户在 VMware 里用 **`MengOS-0.0.1-dev.18-amd64.iso`**（Actions run#18 → Artifacts → `mengos-iso`）复验这三点：① 桌面壁纸是不是浅蓝渐变、② 终端右键有没有菜单且能粘贴、③ 安装器里密码能不能通过校验并建出用户。其余 T3–T9 的验收清单照旧一次性跑；哪项不通过就发编号+截图，再开分支修。
+等待用户按 T10 验收清单（A0–A11）验收：**本次需要下载 ISO**——`MengOS-0.0.1-dev.21-amd64.iso`（1.8G，SHA256 `9c253e9f3d6821a0ced443291708d65fabdefc5846bc7610beede740769a21b6`），Actions run#21（44919431401）→ Artifacts → `mengos-iso`。A10 的 `mengos-update-terminal` 会从 `dev-latest` 预发布下载约 170KB 的 deb（169,408 字节）。通过后回复「T10 通过」，我接着做 T11。
