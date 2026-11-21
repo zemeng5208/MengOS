@@ -987,3 +987,418 @@ git pull
 | A9 | 输入 `exit` | 窗口关闭 | 说明 |
 
 **T9 完成后**：整个第一批任务结束。代理在汇报最后写：“第一批任务 T0–T9 已全部完成，请用户找任务书作者生成第二批任务卡（侧栏、FeatherBot 等）。”
+
+---
+
+# MengOS 第二批任务卡（T10–T16）：验收收尾 + FeatherTerminal 侧栏
+
+> **给执行方**：本文件是第二批任务卡。请先把全文**追加**到 `docs/TASKBOOK.md` 末尾（在一个单独的提交中完成，提交信息 `docs: add batch 2 task cards`），然后只执行用户指定的任务。
+> 第一部分规则（`AGENTS.md`）继续有效。汇报格式继续使用 7 段格式。
+> 系统标识用小写 `mengos`，组件名保留 `Feather*`。
+
+---
+
+## 第零部分：派发方对第一批汇报第 8 节的决定
+
+| 问题 | 决定 |
+|---|---|
+| 1. 第二批任务卡 | 见本文件 T10–T16。FeatherBot 等 AI 功能放到第三批，本批不做 |
+| 2. 安装器改中文名 | **要改**。在 T10 完成 |
+| 3. 密码策略 | **保持“任意非空密码”**（这是个人虚拟机系统）。在 `docs/DECISIONS.md` 记录这条决定及原因，本批不再改动 |
+| 4. 本地 Docker 构建 | **不做**。改用 T10 的“只下载 .deb 更新已安装虚拟机”方案，从根本上减少 ISO 下载 |
+| 5. 分支清理 | **允许**删除已合并的远端分支 `task/T2-ci` … `task/T9-terminal-iso`、`fix/acceptance-1`、`tmp/T6-probe`，以及本地的 `tmp/T6-probe`。删除前先用 `git branch -r --merged origin/main` 确认它们都已合并；**未合并的分支一律不删**，列出来汇报 |
+| 风险 8：build-iso 重复触发 | 在 T10 修改触发条件 |
+
+---
+
+## 第一部分：本批新增规则（与 AGENTS.md 一起遵守）
+
+### 1. 新的验收方式：尽量不下载 ISO
+
+用户网络慢，1.8G 的 ISO 不能每个任务都下载。从 T11 开始：
+
+- **只改了 FeatherTerminal（`rust/**`）的任务**：用户在**已经安装好 MengOS 的虚拟机**中，用 T10 建立的更新命令下载约 200KB 的 `.deb` 安装，然后验收。**不需要下载 ISO。**
+- **改了 `iso/**` 的任务**：才需要下载新 ISO。
+- 每个任务的验收清单第一行必须写明：**本次验收需要下载 ISO 还是只需要更新 .deb**。
+
+### 2. CI 截图是每个 GUI 任务的必备证据
+
+从 T10 起，CI 会在虚拟显示器（Xvfb）里启动 FeatherTerminal 并截图。每个改动 GUI 的任务，汇报第 3 节必须附上截图 artifact 的链接，并**用文字描述截图里能看到什么**。截图只证明程序能启动、画面大致正确，**不代替用户验收**。
+
+### 3. GTK 程序不能卡住界面
+
+- 运行外部命令（`git`、读取大目录、解析 `/proc`）**不准在 GTK 主线程里同步执行**。
+- 做法：在后台线程或 `gio::spawn_blocking` 中执行，用 `async-channel` crate 把结果发回，在 `glib::spawn_future_local` 中接收并更新界面。
+- **不要使用 `glib::MainContext::channel`**：新版 glib 已经删除了这个接口。
+- 任何外部命令失败时，界面显示错误信息（例如“git 执行失败：……”），不准崩溃，不准显示假数据。
+
+### 4. 代码组织
+
+- 跟界面无关、可以单独测试的逻辑（解析 diff、解析 `/proc/net/tcp`、统计历史命令等），放在 `feather-terminal` 内单独的模块中（如 `src/model/`），并写单元测试。
+- 单元测试用的样例数据放在 `rust/crates/feather-terminal/tests/fixtures/`，**只能在测试里使用**，不准出现在正式运行的界面中。
+- 每个任务结束时 `cargo fmt`、`cargo clippy -D warnings`、`cargo test` 必须全部通过。
+
+---
+
+## 第二部分：任务总览
+
+| 任务 | 名称 | 改动范围 | 用户验收方式 |
+|---|---|---|---|
+| T10 | 收尾 + 提速 | iso + CI + rust | **下载一次 ISO**，完整安装一次（这是后续所有验收的基础） |
+| T11 | 多标签 + 搜索 + 当前目录跟踪 | rust | 更新 .deb |
+| T12 | 右侧侧栏骨架 | rust | 更新 .deb |
+| T13 | 侧栏：文件树与预览 | rust | 更新 .deb |
+| T14 | 侧栏：文件更改（Git Diff） | rust | 更新 .deb |
+| T15 | 侧栏：网络连接 | rust | 更新 .deb |
+| T16 | 侧栏：个人资料 + 第二批收尾 | rust + iso | 下载一次 ISO |
+
+---
+
+## 第三部分：任务卡
+
+### T10：收尾与提速
+
+**分支**：`task/T10-polish`
+
+**目标**：处理第一批遗留问题；建立“只更新 .deb”的快速验收通道；CI 增加 GUI 截图；用户在一个干净的 ISO 上完整验收一次。
+
+**步骤**：
+
+1. **分支清理**（按第零部分第 5 条执行）：
+   ```powershell
+   git fetch --prune
+   git branch -r --merged origin/main
+   ```
+   只删除输出中出现、且属于允许清单的分支：
+   ```powershell
+   git push origin --delete task/T2-ci
+   # ……逐个删除，每条命令的输出都要贴进汇报
+   git branch -D tmp/T6-probe
+   ```
+
+2. **build-iso 触发条件**：修改 `.github/workflows/build-iso.yml`，触发条件改为：
+   - `pull_request`（路径过滤保持不变）
+   - `push` 到 `main`（路径过滤保持不变）
+   - `workflow_dispatch`
+   - **删除对任意分支 push 的触发**。
+   修改后在汇报里写明：一次 PR 推送只会触发一次 build-iso。
+
+3. **安装器中文名**：
+   - 先在 CI 中查清安装器图标的 `.desktop` 文件实际路径（`dpkg -L calamares-settings-debian | grep desktop`），贴进汇报。
+   - 用 hook 修改它：`Name=安装 MengOS`，`Name[zh_CN]=安装 MengOS`，`Comment=将 MengOS 安装到硬盘`。图标保持系统自带的安装图标即可，**不要自己画**。
+   - 如果 Live 桌面上的安装图标是另一个副本（在 `/etc/skel/Desktop` 或 live-config 生成），也要一起改；查不清楚时在汇报第 5 节说明。
+
+4. **建立 .deb 快速更新通道**（**用户已同意**在本仓库创建一个名为 `dev-latest` 的**预发布版本（pre-release）**，专门存放最新的 .deb）：
+   - 在 `rust.yml` 中新增一个 job `publish-deb`：仅在 `push` 到 `main` 时运行；用 `cargo deb` 打包 `feather-terminal`；然后用 `gh release` 把 deb 上传到 tag `dev-latest` 的预发布版本，**覆盖同名旧文件**（`gh release upload dev-latest <文件> --clobber`）。如果 release 不存在，先 `gh release create dev-latest --prerelease --title "dev-latest" --notes "自动构建，仅供开发验收"`。
+   - 上传的文件名固定为 `feather-terminal_latest_amd64.deb`（另外再上传一个带版本号的副本也可以）。
+   - 工作流需要 `permissions: contents: write`。使用 `GITHUB_TOKEN`，**不准使用个人 Token**。
+   - 在仓库中新增脚本 `iso/config/includes.chroot/usr/local/bin/mengos-update-terminal`（安装后的系统里就会自带这个命令；**现有虚拟机**里，用户按验收清单手动创建一次）：
+     ```bash
+     #!/usr/bin/env bash
+     # 作用：下载并安装最新的 FeatherTerminal 开发版
+     set -euo pipefail
+     URL="https://github.com/zemeng5208/MengOS/releases/download/dev-latest/feather-terminal_latest_amd64.deb"
+     TMP="$(mktemp -d)"
+     echo "正在下载：$URL"
+     wget -q --show-progress -O "$TMP/feather-terminal.deb" "$URL"
+     sudo apt install -y "$TMP/feather-terminal.deb"
+     dpkg -s feather-terminal | grep -E '^(Package|Version):'
+     rm -rf "$TMP"
+     echo "更新完成。请关闭所有 FeatherTerminal 窗口后重新打开。"
+     ```
+     加可执行权限（`git update-index --chmod=+x`）。确认 `wget` 在包清单中，没有就加上。
+   - 为了让用户能看出装的是不是最新版：deb 的版本号改为 `0.0.1+<CI 运行号>`，例如 `0.0.1+31`（在 CI 中用 `cargo deb --deb-version` 参数设置，具体参数名以 `cargo deb --help` 实际输出为准）。
+   - FeatherTerminal 窗口标题改为 `FeatherTerminal <版本号>`，版本号在编译时由 CI 用环境变量传入（例如 `option_env!("MENGOS_BUILD")`，没有时显示 `dev`）。
+
+5. **CI 截图**：在 `rust.yml` 中新增 job `gui-smoke`（在 `debian:trixie` 或 `rust:1.100.0-trixie` 容器中运行）：
+   ```bash
+   apt-get update
+   apt-get install -y xvfb xauth imagemagick zsh libgtk-4-1 libvte-2.91-gtk4-0 dbus-x11 fonts-noto-cjk
+   # 构建或下载 feather-terminal 二进制（与 check job 相同方式）
+   export GSK_RENDERER=cairo
+   export NO_AT_BRIDGE=1
+   xvfb-run -a -s "-screen 0 1280x800x24" bash -c '
+     ./feather-terminal &
+     APP=$!
+     sleep 8
+     import -window root shot-start.png
+     kill $APP || true
+   '
+   ```
+   - 把 `shot-start.png` 作为 artifact `gui-smoke` 上传。
+   - 如果程序在 8 秒内崩溃，job 必须失败（检查进程是否还活着）。
+   - 以后的任务会在这个 job 里加更多截图（例如自动输入命令后的截图）。如何向终端自动输入：用 `xdotool type` 和 `xdotool key Return`（安装 `xdotool`），先用 `xdotool search --name FeatherTerminal windowactivate` 激活窗口。本任务先做到：启动 → 输入 `echo hello-from-ci` → 回车 → 截图 `shot-echo.png`。
+
+6. **记录密码策略决定**到 `docs/DECISIONS.md`。
+
+7. 提交信息：`chore: batch-1 polish, deb fast channel, CI GUI smoke`。合并后确认 main 上 `rust.yml` 的 `publish-deb` 已成功，并在汇报中给出 release 页面链接和 deb 文件大小。
+
+**完成标准**：
+- build-iso、rust（含 gui-smoke、publish-deb）全部成功；
+- `https://github.com/zemeng5208/MengOS/releases/tag/dev-latest` 存在，有 `feather-terminal_latest_amd64.deb`；
+- `shot-echo.png` 中能看到 `hello-from-ci`（在汇报中描述）；
+- 新 ISO 已构建。
+
+**本任务的验收清单**（这一轮请用户**完整做一次**，以后的任务都建立在这台虚拟机上）：
+
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **本次需要下载 ISO**（约 1.8G）。下载 artifact，`Get-FileHash` 核对 SHA256 | 一致 | 两个值 |
+| A1 | 新建虚拟机 `MengOS-dev`（4 核 / 6GB / 60GB / UEFI / 不勾安全引导 / NAT），用新 ISO 启动 | 进入 Live 桌面，壁纸是 MengOS 的渐变壁纸 | 截图 |
+| A2 | 看桌面上的安装图标 | 名字是“安装 MengOS” | 截图 |
+| A3 | 看顶部面板右侧 | 有网络图标、音量、输入法、时钟（虚拟机没有电池，看不到电池图标是正常的） | 截图 |
+| A4 | 双击“安装 MengOS”，中文、上海时区、抹除磁盘（确认 btrfs）、设置用户名和密码、不勾自动登录，开始安装 | 安装完成，无报错 | 报错截图 + `session.log` |
+| A5 | 关机，CD/DVD 取消“启动时连接”，开机 | 出现登录界面，密码登录后进入桌面，壁纸正确 | 截图 |
+| A6 | 打开 FeatherTerminal，看窗口标题 | 显示 `FeatherTerminal 0.0.1+<数字>` | 截图 |
+| A7 | 在终端里右键 | 弹出“复制 / 粘贴 / 全选 / 清屏”菜单 | 截图 |
+| A8 | 在宿主机复制文字，到虚拟机终端右键 → 粘贴（如果不行，先在 VMware 菜单：虚拟机 → 设置 → 选项 → 客户机隔离，勾选“启用复制粘贴”，再试） | 能粘贴 | 说明结果 |
+| A9 | 终端运行 `findmnt /`、`echo $SHELL`、`systemctl --failed` | btrfs、`/usr/bin/zsh`、0 个失败 | 输出原文 |
+| A10 | 终端运行 `mengos-update-terminal` | 下载并安装成功，最后显示 `Version: 0.0.1+<数字>` | 输出原文 |
+| A11 | 关机，在 VMware 中给这台虚拟机**拍一个快照**，命名 `T10-clean` | 快照成功（以后测坏了可以一键恢复） | — |
+
+---
+
+### T11：多标签 + 搜索 + 当前目录跟踪
+
+**分支**：`task/T11-tabs`
+**用户验收方式**：更新 .deb（不需要下载 ISO）
+
+**要求**：
+
+1. **多标签页**：
+   - 使用 `gtk::Notebook`（或 libadwaita 的 TabView；**本任务不引入 libadwaita**，就用 Notebook）。
+   - `Ctrl+Shift+T` 新建标签，`Ctrl+Shift+W` 关闭当前标签，`Ctrl+PageUp/PageDown` 切换。
+   - 每个标签是一个独立的 `vte4::Terminal` + 独立的 zsh 进程。
+   - 标签上有关闭按钮；标签标题显示当前目录的最后一级名称（见第 3 条）。
+   - 某个标签里的 zsh 退出时，只关闭这个标签；最后一个标签关闭时关闭窗口。
+2. **搜索**：
+   - `Ctrl+Shift+F` 在终端上方显示搜索栏（`gtk::SearchBar` + `gtk::SearchEntry`），回车查找下一个，`Shift+回车` 查找上一个，`Esc` 关闭。
+   - 使用 VTE 自带的搜索接口（`search_set_regex`、`search_find_next`、`search_find_previous`，以 docs.rs 上 vte4 0.10.0 的实际名称为准）。正则用 `vte4::Regex`，注意 PCRE2 的标志参数，输入内容要转义成普通文本匹配。
+   - 找不到时搜索框显示红色或提示“未找到”。
+3. **当前目录跟踪**：
+   - 在 `spawn_async` 的回调中拿到 zsh 的 PID，保存到这个标签对应的结构体中。
+   - 每 1 秒（`glib::timeout_add_seconds_local`）读取 `/proc/<PID>/cwd` 的链接目标，得到当前目录。读取失败时保持上一次的值。
+   - 把“当前目录”做成这个标签对象的一个可读取的值，后续侧栏任务都要用到它。**要求**：写一个函数 `fn current_dir(&self) -> Option<PathBuf>`，并在代码注释中说明数据来源是 `/proc/<pid>/cwd`。
+4. **右键菜单**增加“新建标签页”。
+5. **gui-smoke** 增加截图：启动 → `Ctrl+Shift+T` → 在第二个标签输入 `cd /tmp` 回车 → 等 2 秒 → 截图 `shot-tabs.png`（应能看到两个标签，第二个标签标题为 `tmp`）。
+6. 单元测试：把“从路径得到标签标题”（如 `/home/user` → `user`，`/` → `/`）写成纯函数并测试。
+7. 提交信息：`feat(terminal): tabs, search and cwd tracking`。
+
+**完成标准**：CI 全绿；`shot-tabs.png` 中能看到两个标签且第二个标题为 `tmp`（文字描述）。
+
+**本任务的验收清单**：
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **只需更新 .deb**：在 MengOS-dev 虚拟机里打开任意终端，运行 `mengos-update-terminal` | 显示新的版本号 | 输出原文 |
+| A1 | 打开 FeatherTerminal，按 `Ctrl+Shift+T` 三次 | 共 4 个标签 | 截图 |
+| A2 | 在某个标签输入 `cd /etc` | 1–2 秒内该标签标题变为 `etc` | 截图 |
+| A3 | `Ctrl+PageUp/PageDown` 切换标签 | 能切换 | — |
+| A4 | 在某个标签输入 `exit` | 只关闭这个标签 | — |
+| A5 | 运行 `ls /usr/bin`，按 `Ctrl+Shift+F`，输入 `python`，按回车几次 | 依次高亮匹配项；输入不存在的词时提示未找到 | 截图 |
+| A6 | 按 `Esc` | 搜索栏关闭，焦点回到终端，可以继续打字 | — |
+| A7 | 中文输入（`Ctrl+空格`，输入 `nihao`）在新标签中仍可用 | 出现候选框 | 截图 |
+
+---
+
+### T12：右侧侧栏骨架
+
+**分支**：`task/T12-sidebar`
+**用户验收方式**：更新 .deb
+
+**要求**：
+
+1. 窗口布局改为 `gtk::Paned`（水平）：**左边是 T11 的标签页终端，右边是侧栏**。
+   - 侧栏默认宽度 360 像素，可以拖动分隔线调整；最小 260 像素。
+   - `Ctrl+Shift+B` 显示/隐藏侧栏；隐藏后终端占满窗口。
+   - 记住侧栏宽度和是否显示：保存到 `~/.config/mengos/feather-terminal.toml`（用 `serde` + `toml` crate；目录不存在时创建；文件损坏时使用默认值并在 stderr 打印警告，不准崩溃）。
+2. 侧栏结构：
+   - 上方大部分区域是一个 `gtk::Stack`，放 6 个页面；
+   - **左下角**一排 6 个图标按钮（`gtk::ToggleButton`，同一时间只有一个按下），点击切换页面；鼠标悬停显示提示文字；
+   - 图标用系统图标名（例如 `document-edit-symbolic`、`network-wired-symbolic`、`folder-symbolic`、`user-available-symbolic`、`avatar-default-symbolic`、`dialog-password-symbolic`），**在 CI 中确认这些图标在 elementary-xfce 或 Adwaita 图标主题中存在**，不存在就换成存在的，并在汇报中列出最终使用的图标名。
+3. 6 个页面（顺序固定）及本任务的内容：
+
+   | 顺序 | 页面 | 本任务显示内容 |
+   |---|---|---|
+   | 1 | 文件更改 | “尚未实现（T14）” |
+   | 2 | 网络连接 | “尚未实现（T15）” |
+   | 3 | 文件树 | “尚未实现（T13）” |
+   | 4 | 终端助手 | “尚未实现（第三批：FeatherBot）” |
+   | 5 | 个人资料 | “尚未实现（T16）” |
+   | 6 | 密码库 | “尚未实现（后续批次：FeatherVault）” |
+
+   每个页面顶部有标题，并显示一行小字：“当前目录：<当前标签的目录>”，切换标签或 `cd` 后 1–2 秒内更新。这是为了证明侧栏能拿到 T11 的当前目录。
+4. **焦点规则**：点击侧栏按钮后，键盘焦点要回到终端（用户继续打字时输入应进入终端，而不是按钮）。
+5. 代码结构：每个页面一个模块（`src/sidebar/changes.rs`、`network.rs`、`files.rs`、`assistant.rs`、`profile.rs`、`vault.rs`），每个模块对外提供一个创建页面的函数和一个“当前目录变化时调用”的函数。后续任务只改对应模块。
+6. gui-smoke 增加截图 `shot-sidebar.png`。
+7. 提交信息：`feat(terminal): sidebar skeleton with six pages`。
+
+**本任务的验收清单**：
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **只需更新 .deb**：运行 `mengos-update-terminal` | 新版本号 | 输出原文 |
+| A1 | 打开 FeatherTerminal | 左边终端，右边侧栏，侧栏左下角有一排 6 个图标 | 截图 |
+| A2 | 逐个点击 6 个图标，鼠标悬停看提示 | 页面切换，每页显示“尚未实现（…）”和当前目录 | 截图 |
+| A3 | 点完图标后直接打字 | 文字输入到终端里 | — |
+| A4 | 在终端 `cd /usr/share` | 侧栏“当前目录”1–2 秒内变为 `/usr/share` | 截图 |
+| A5 | 拖动分隔线改宽度；按 `Ctrl+Shift+B` 隐藏再显示 | 都正常 | — |
+| A6 | 关闭窗口重新打开 | 侧栏宽度和显示状态保持上次的样子 | — |
+
+---
+
+### T13：侧栏页面——文件树与预览
+
+**分支**：`task/T13-files`
+**用户验收方式**：更新 .deb
+
+**要求**：
+
+1. 显示**当前标签的当前目录**下的文件树：
+   - 使用 `gtk::ListView` + `gtk::TreeListModel` + `gio::File` 枚举子项（**懒加载**：只有展开文件夹时才读取它的内容）。
+   - 文件夹排在前面，按名称排序；默认不显示隐藏文件，顶部有一个“显示隐藏文件”开关。
+   - 读取目录在后台进行（见第一部分第 3 条）；一个目录超过 2000 项时只显示前 2000 项并提示“已截断”。
+   - 当前目录变化时，文件树切换到新目录。
+   - 顶部有“刷新”按钮。
+2. **预览**（文件树下方，上下用 `gtk::Paned` 分开）：
+   - 单击文本类文件（按 MIME 类型判断：`text/*`、`application/json`、`application/x-shellscript` 等，用 `gio` 的内容类型判断）：显示前 200KB 的内容，等宽字体，只读；超过 200KB 显示“文件过大，仅显示前 200KB”。
+   - 二进制文件显示“二进制文件，无法预览”和文件大小。
+   - 图片（`image/*`）：用 `gtk::Picture` 显示缩略。
+   - 读取失败（没有权限等）显示具体错误。
+   - **本任务不做** Markdown 渲染和语法高亮。
+3. 右键文件（或选中后点预览区右上角的 `···` 按钮）弹出菜单：
+   - “用默认程序打开”：`gio::AppInfo::launch_default_for_uri`；
+   - “在文件管理器中显示”：用 `gio` 的 D-Bus 接口 `org.freedesktop.FileManager1.ShowItems`，失败时退回到用 Thunar 打开所在目录；
+   - “复制路径”：复制到剪贴板；
+   - 对 `.html` 文件，第一项文字改为“在默认浏览器中打开”。**不在终端里内嵌网页预览。**
+4. 双击文件夹：进入该文件夹（只改变文件树的显示，**不改变终端的当前目录**，并在顶部显示“正在浏览：<路径>（与终端目录不同）”，再有一个“回到终端目录”按钮）。
+5. 单元测试：“是否截断”“排序规则”写成纯函数并测试。
+6. gui-smoke：启动后打开文件树页截图 `shot-files.png`。
+7. 提交信息：`feat(terminal): file tree and preview page`。
+
+**本任务的验收清单**：
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **只需更新 .deb** | 新版本号 | 输出原文 |
+| A1 | 打开文件树页 | 显示主目录内容，文件夹在前 | 截图 |
+| A2 | 终端 `cd /etc` | 文件树切换到 `/etc` | 截图 |
+| A3 | 展开 `apt` 文件夹，单击 `sources.list.d` 里的文件 | 下方显示文件内容 | 截图 |
+| A4 | 单击 `/usr/bin/ls` | 显示“二进制文件，无法预览” | 截图 |
+| A5 | 终端运行 `echo '<h1>你好</h1>' > ~/test.html; cd ~`，在文件树右键 `test.html` → 在默认浏览器中打开 | Firefox 打开并显示“你好” | 截图 |
+| A6 | 右键任意文件 → 复制路径，到终端里粘贴 | 粘贴出完整路径 | — |
+| A7 | 右键 → 在文件管理器中显示 | Thunar 打开并选中该文件（或至少打开所在目录） | 说明结果 |
+| A8 | 打开 `/usr/share/backgrounds` 里的图片 | 显示图片预览 | 截图 |
+
+---
+
+### T14：侧栏页面——文件更改（Git Diff）
+
+**分支**：`task/T14-changes`
+**用户验收方式**：更新 .deb
+
+**要求**：
+
+1. 判断当前目录是否在 Git 仓库中：在后台执行 `git -C <当前目录> rev-parse --show-toplevel`。
+   - 不是 Git 仓库：显示“当前目录不是 Git 仓库，无法显示文件更改。（非 Git 文件需要基线快照才能对比，本功能暂不支持）”。
+   - 系统没有 git：显示“未安装 git”。
+2. 是 Git 仓库时：
+   - 执行 `git -C <仓库根> status --porcelain=v1 -z` 得到更改的文件列表（新增、修改、删除、未跟踪），列表显示文件路径和状态标记；
+   - 单击某个文件，执行 `git -C <仓库根> diff --no-color --no-ext-diff -- <文件>`（已暂存的改动另外用 `--cached` 获取，两部分都显示并标明“已暂存 / 未暂存”）；
+   - 未跟踪文件：显示“新文件（未跟踪）”并预览前 200KB 内容，全部按新增行显示；
+   - 显示规则：`+` 开头的行绿色背景，`-` 开头的行红色背景，`@@` 行蓝灰色，其他行普通颜色；等宽字体，只读。用 `gtk::TextView` + `TextTag` 实现。
+   - diff 超过 5000 行时只显示前 5000 行并提示“已截断”。
+3. 刷新：页面可见时，每 3 秒自动刷新一次文件列表（后台执行）；页面不可见时**不刷新**；顶部有“刷新”按钮。
+4. **所有数据必须来自真实的 git 命令输出。** 不准缓存假结果，不准自己比较文件内容。
+5. 把“解析 `status --porcelain=v1 -z`”和“给 diff 每一行分类（新增/删除/块头/上下文）”写成纯函数，并用 `tests/fixtures/` 中的样例写至少 8 个单元测试（包括文件名含空格、含中文、重命名、删除的情况）。
+6. gui-smoke：在 CI 中创建一个临时 Git 仓库，提交一个文件后修改它，让终端 `cd` 进去，打开文件更改页，截图 `shot-changes.png`。
+7. 提交信息：`feat(terminal): git changes page`。
+
+**本任务的验收清单**：
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **只需更新 .deb** | 新版本号 | 输出原文 |
+| A1 | 终端 `cd ~`，打开文件更改页 | 显示“不是 Git 仓库” | 截图 |
+| A2 | 运行：`mkdir ~/demo && cd ~/demo && git init && git config user.email a@b.c && git config user.name test && echo 第一行 > a.txt && git add . && git commit -m init` | 页面显示“没有更改”之类的提示 | 截图 |
+| A3 | 运行 `echo 第二行 >> a.txt` | 3 秒内列表出现 `a.txt`，点击后看到绿色的 `+第二行` | 截图 |
+| A4 | 运行 `echo 新文件 > b.txt` | 出现 `b.txt`（未跟踪） | 截图 |
+| A5 | 运行 `git add a.txt` | `a.txt` 的改动显示在“已暂存”部分 | 截图 |
+| A6 | 运行 `rm b.txt; git commit -qm x; sed -i 's/第一行/改过的第一行/' a.txt` | 点击 `a.txt` 看到红色 `-第一行`、绿色 `+改过的第一行` | 截图 |
+| A7 | 运行 `git diff`，对比终端输出和侧栏显示 | 内容一致 | 不一致时两张截图 |
+
+---
+
+### T15：侧栏页面——网络连接
+
+**分支**：`task/T15-network`
+**用户验收方式**：更新 .deb
+
+**目标**：显示**当前标签里运行的程序**（zsh 及其所有子孙进程）的真实 TCP/UDP 连接。
+
+**要求**：
+
+1. **找出进程**：从当前标签的 zsh PID 出发，读取 `/proc/*/stat` 的父进程号，找出所有子孙进程（包括 zsh 本身）。
+2. **找出连接**：
+   - 对每个进程读取 `/proc/<pid>/fd/` 中形如 `socket:[inode]` 的链接，得到 socket inode 集合；
+   - 读取 `/proc/net/tcp`、`/proc/net/tcp6`、`/proc/net/udp`、`/proc/net/udp6`，按 inode 匹配；
+   - 解析出：协议、本地地址:端口、远端地址:端口、状态（TCP 状态码转成 `ESTABLISHED` 等文字）、所属进程名和 PID。
+   - 地址是十六进制小端格式，IPv6 也要正确解析。**解析代码自己写成纯函数**（不引入额外 crate），在 `docs/DECISIONS.md` 记录原因：“逻辑简单，便于用样例数据测试”。
+3. **显示**：
+   - 列表每行：`进程名(PID)  协议  远端地址:端口  状态`；
+   - 顶部一行极简路径：`当前程序 → 本机网络 → 远端地址`（本批不涉及代理，代理部分在后续 FeatherNet 阶段加入）；
+   - 没有连接时显示“暂无网络连接”；
+   - 页面底部一行固定说明：“数据来源：本机连接表（/proc/net）。仅表示本机存在该连接，不代表对方已收到数据。”
+   - 监听中的端口（`LISTEN`）单独分组显示。
+4. 刷新：页面可见时每 2 秒刷新（后台执行）；页面不可见时不刷新。
+5. **只能看到当前用户自己的进程**（普通权限即可），**不要求 root**，不准用 sudo。读取失败的进程直接跳过。
+6. **禁止**：显示任何不是从 `/proc` 读出来的连接；禁止添加“发包”“扫描”按钮。
+7. 单元测试（至少 10 个）：十六进制地址解析（IPv4、IPv6、IPv4 映射的 IPv6）、端口解析、TCP 状态码转换、从 `fixtures` 中的 `/proc/net/tcp` 样例解析出正确条目、父子进程树计算。
+8. gui-smoke：在 CI 中让终端运行 `python3 -m http.server 8765 &` 和 `python3 -c "import socket,time;s=socket.create_connection(('127.0.0.1',8765));time.sleep(30)" &`，打开网络页截图 `shot-network.png`。
+9. 提交信息：`feat(terminal): per-tab network connections page`。
+
+**本任务的验收清单**：
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **只需更新 .deb** | 新版本号 | 输出原文 |
+| A1 | 新开一个标签，打开网络页 | “暂无网络连接” | 截图 |
+| A2 | 在该标签运行 `python3 -m http.server 8000` | 2 秒内“监听中”出现 `python3 ... 8000 LISTEN` | 截图 |
+| A3 | 再开一个标签，运行 `curl -s -o /dev/null https://www.debian.org; python3 -c "import urllib.request,time;urllib.request.urlopen('https://www.debian.org');time.sleep(20)"` | 切到这个标签时，20 秒内能看到 python3 到某个远端地址 `:443` 的 `ESTABLISHED` 连接 | 截图 |
+| A4 | 切回第一个标签 | 只显示 http.server 的监听，**不显示**第二个标签的连接 | 截图 |
+| A5 | 在终端运行 `ss -tnp`，对比 | 侧栏显示的连接都能在 `ss` 输出里找到 | 截图 |
+| A6 | 在 http.server 标签按 `Ctrl+C` | 2 秒内连接消失，显示“暂无网络连接” | — |
+
+---
+
+### T16：侧栏页面——个人资料 + 第二批收尾
+
+**分支**：`task/T16-profile`
+**用户验收方式**：下载一次 ISO（第二批的最终版本）
+
+**要求**：
+
+1. **个人资料页**显示（全部来自真实数据，取不到就显示“未知”）：
+   - 用户名、UID、所属组（`id` 的信息，用 `nix` crate 或读取 `/etc/group` 实现）；
+   - 主机名、系统版本（`/etc/os-release` 的 `PRETTY_NAME`）、内核版本（`uname`）；
+   - 当前 shell、FeatherTerminal 版本号；
+   - 本次开机时长（`/proc/uptime`）；
+   - **常用命令 Top 10**：读取 `~/.zsh_history`，**只统计每行第一个单词（命令名）**，例如 `git commit -m 密码123` 只计为 `git`。注意 zsh 扩展历史格式 `: 1700000000:0;命令`，要去掉前缀。
+     - 页面上写明：“只统计命令名称，不显示参数。数据只在本机读取，不上传。”
+     - 历史文件不存在时显示“暂无历史记录”。
+   - “AI 使用统计”一栏：显示“未关联（FeatherBot 尚未实现）”。
+2. 单元测试：解析 zsh 扩展历史格式、只取命令名、跳过空行和注释、统计排序（至少 6 个）。
+3. **第二批收尾**：
+   - 更新 `README.md`：当前状态、如何下载 ISO、如何用 `mengos-update-terminal` 更新终端、FeatherTerminal 快捷键列表（`Ctrl+Shift+T/W/F/B/C/V`、`Ctrl+PageUp/PageDown`）；
+   - 新建 `docs/USER_GUIDE_ZH.md`：面向学生用户，写清楚 FeatherTerminal 每个侧栏页面怎么用、显示的数据从哪里来、哪些页面尚未实现；
+   - 更新 `docs/STATUS.md`，把 T10–T16 的状态填写完整；
+   - 触发一次 ISO 构建（`gh workflow run build-iso.yml --ref main`），在汇报中给出新的 ISO 文件名、大小、SHA256。
+4. gui-smoke：截图 `shot-profile.png`。
+5. 提交信息：`feat(terminal): profile page; docs for batch 2`。
+
+**本任务的验收清单**：
+| 编号 | 你要做的操作 | 应该看到的结果 | 如果不对，请发给我 |
+|---|---|---|---|
+| A0 | **先只更新 .deb**，验收 A1–A3 | 新版本号 | 输出原文 |
+| A1 | 打开个人资料页 | 用户名、系统版本、内核、开机时长都正确 | 截图 |
+| A2 | 运行几次 `ls`、`git status`、`echo 秘密参数`，关闭并重新打开 FeatherTerminal，看个人资料页 | Top 10 中出现 `ls`、`git`、`echo`，**看不到“秘密参数”** | 截图 |
+| A3 | 看“AI 使用统计” | 显示“未关联” | — |
+| A4 | **下载新 ISO**，核对 SHA256；用 VMware 快照 `T10-clean` 之外的新虚拟机，用新 ISO 启动 Live | 桌面上的 FeatherTerminal 打开后，6 个侧栏页面中 4 个有真实内容，2 个显示“尚未实现” | 截图 |
+| A5 | 看 GitHub 上的 README 和 `docs/USER_GUIDE_ZH.md` | 中文说明清楚，能看懂 | 意见 |
+
+**T16 完成后**：在汇报最后写：“第二批任务 T10–T16 已全部完成，请用户找任务书作者生成第三批任务卡（FeatherBot / 模型网关）。”
