@@ -8,6 +8,12 @@ use std::path::PathBuf;
 use gtk::prelude::*;
 use vte4::prelude::*;
 
+/// 编译时由 CI 注入的版本号（例如 `0.0.1+31`）；本地构建没有注入时显示 `dev`。
+const BUILD_VERSION: &str = match option_env!("MENGOS_BUILD") {
+    Some(version) => version,
+    None => "dev",
+};
+
 /// 依次尝试的 shell：`/usr/bin/zsh` → 环境变量 `$SHELL` → `/bin/bash`。
 fn shell_candidates() -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
@@ -37,7 +43,8 @@ fn main() {
 
 fn build_ui(application: &gtk::Application) {
     let window = gtk::ApplicationWindow::new(application);
-    window.set_title(Some("FeatherTerminal"));
+    let title = format!("FeatherTerminal {BUILD_VERSION}");
+    window.set_title(Some(&title));
     window.set_default_size(1000, 650);
 
     let terminal = vte4::Terminal::new();

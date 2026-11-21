@@ -40,3 +40,8 @@
 | 2026-11-19 | `vte4::Terminal::reset()` 必须传两个参数 `reset(true, true)` | docs.rs 上 vte4 0.10.0 的 `TerminalExt::reset` 签名是 `reset(clear_tabstops: bool, clear_history: bool)`，无参调用编译不过 |
 | 2026-11-19 | Calamares 里删掉 `passwordRequirements.libpwquality`，并把 `minLength` 从 `-1` 改成 `1` | 用户实测密码过不了字典校验、无法建用户。Debian 的 `users.conf` 写的是 `libpwquality: [minlen=0, minclass=0]`，但 Calamares 3.3.14 `src/modules/users/CheckPWQuality.cpp` 里 `pwquality_check()` 仍会跑 cracklib 字典检查并要求评分 ≥ 40（`arbitrary_minimum_strength`），`Config::passwordStatus()` 在 `requireStrongPasswords` 为真时把失败判为 `Invalid` → 「下一步」永久不可用 |
 | 2026-11-19 | 临时诊断 hook `0310-mengos-diag` 只用于这一轮核对 ISO 内容，验证完即删除（`b9f4c14`） | 要先确认 ISO 里到底有没有壁纸文件、xfconf、SVG 加载器，而不是靠猜 |
+| 2026-11-21 | 密码策略保持「任意非空密码」（`minLength: 1`，无 `libpwquality` 字典/强度检查） | 派发方在第二批任务书第零部分明确决定：这是个人虚拟机系统，不要求密码强度；记录下来，后续任务不再改动。原因见上一轮：Calamares 3.3.14 的 cracklib 检查会把普通密码判为 Invalid |
+| 2026-11-21 | FeatherTerminal 的 .deb 通过 GitHub 预发布 `dev-latest` 分发，文件名固定 `feather-terminal_latest_amd64.deb`，版本号 `0.0.1+<CI 运行号>` | 用户网络慢：只改 `rust/**` 的任务，用户下载约 200KB 的 deb 就能验收，不必每次下 1.8G 的 ISO；版本号带运行号便于确认装的是不是最新 |
+| 2026-11-21 | CI 用 `Xvfb + openbox + imagemagick(import) + xdotool` 做 GUI 截图（`gui-smoke` job） | 第二批任务书第一部分第 2 条要求；截图只证明程序能启动、画面大致正确，**不代替用户验收** |
+| 2026-11-21 | 安装器图标只改 `.desktop` 的 `Name`/`Name[zh_CN]`/`Comment`，图标沿用系统自带的 `/usr/share/pixmaps/install-debian.png` | T10 第 3 步明确「图标保持系统自带的安装图标即可，不要自己画」 |
+| 2026-11-21 | `rust.yml` 的 `push` 触发由 `branches: ["**"]` 收窄为 `[main]` | 一次 PR 推送原本会同时触发 `push` 与 `pull_request` 两份运行（build-iso 自 T3 起就只限 main，没有这个问题；rust 有）。收窄后 PR 推送只跑一份，`pull_request` 仍然覆盖 PR 分支 |
