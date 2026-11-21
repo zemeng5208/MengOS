@@ -24,8 +24,11 @@ jobs:
       - name: 安装 cargo-deb
         run: cargo install cargo-deb --locked
       - name: 打包 feather-terminal
+        env:
+          # 与 rust.yml 保持一致：窗口标题与 deb 版本号都带 CI 运行号
+          MENGOS_BUILD: 0.0.1+${{ github.run_number }}
         run: |
-          cargo deb -p feather-terminal
+          cargo deb -p feather-terminal --deb-version "0.0.1+${GITHUB_RUN_NUMBER}"
           echo "== 生成的 deb =="
           ls -l target/debian/
       - name: 显示 deb 里的文件与依赖
