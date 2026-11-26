@@ -215,12 +215,14 @@ pub fn build() -> PageView {
     paned.set_position(300);
     root.append(&paned);
 
-    // 终端目录变化时（切换标签或 cd）跟着走；同一条目录不重复读
-    let state_weak = Rc::downgrade(&state);
+    // 终端目录变化时（切换标签或 cd）跟着走；同一条目录不重复读。
+    //
+    // 这里必须持有强引用：`FilesState` 里装的是控件，控件自己的回调都只拿弱引用
+    // （否则就是引用环）。如果这里也用弱引用，`build()` 一返回 state 就被丢掉，
+    // 文件树永远是空的。
+    let state_for_dir = Rc::clone(&state);
     let on_dir_changed: DirCallback = Rc::new(move |dir: Option<&Path>| {
-        let Some(state) = state_weak.upgrade() else {
-            return;
-        };
+        let state = &state_for_dir;
         let dir = dir.map(Path::to_path_buf);
         let changed = *state.terminal_dir.borrow() != dir;
         state.terminal_dir.replace(dir.clone());
@@ -228,7 +230,7 @@ pub fn build() -> PageView {
             return;
         }
         match dir {
-            Some(dir) => load_root(&state, &dir),
+            Some(dir) => load_root(state, &dir),
             None => {
                 state.tree.clear();
                 state.preview.show_message("还不知道终端的当前目录");
@@ -275,6 +277,7 @@ fn load_root(state: &Rc<FilesState>, dir: &Path) {
         };
         match result {
             Ok((entries, truncated)) => {
+                eprintln!("文件树：{} 读到 {} 项", dir.display(), entries.len());
                 state.tree.fill(&entries);
                 if truncated {
                     state.truncated_label.set_text(&format!(

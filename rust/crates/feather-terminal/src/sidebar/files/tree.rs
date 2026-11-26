@@ -63,6 +63,10 @@ pub fn build(callbacks: Callbacks) -> FileTree {
     let on_menu = Rc::clone(&callbacks.on_menu);
     factory.connect_bind(move |_, object| {
         let Some(list_item) = object.downcast_ref::<gtk::ListItem>() else {
+            eprintln!(
+                "文件树：绑定行时收到的对象不是 ListItem，而是 {}",
+                object.type_().name()
+            );
             return;
         };
         let Some(row) = list_item
@@ -160,6 +164,7 @@ impl FileTree {
             self.root_store
                 .append(&glib::BoxedAnyObject::new(entry.clone()));
         }
+        eprintln!("文件树：根 store 现在有 {} 项", self.root_store.n_items());
     }
 
     /// 清空文件树（还不知道目录、或者正在读新目录时）。
