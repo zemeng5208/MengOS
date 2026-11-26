@@ -52,3 +52,9 @@
 | 2026-11-26 | `State` 用 `thread_local!` 里的强引用保活，所有信号回调只持 `Weak<State>` | 直接原因是 `build_ui` 返回时 `Rc<State>` 被回收，导致定时器立刻 Break、所有动作处理器变成空操作（标签建不出来、目录不更新）。用 `thread_local` 而不是让回调持强引用，是为了不形成「State → 控件 → 回调 → State」的引用环 |
 | 2026-11-26 | 标签标题 `Label` 必须同时设 `set_width_chars(12)` 与 `set_ellipsize(End)` | GTK4 里设了 `ellipsize` 的 Label 自然宽度按省略号算，只给 `max_width_chars` 会被压成「…」；`width_chars` 提供最小字符宽度 |
 | 2026-11-26 | `spawn_async` 回调里的 PID 用 `pid.into_glib()` 转 i32 再拼 `/proc/<pid>/cwd` | vte4 0.10 的回调类型是 `Result<glib::Pid, glib::Error>`（见 docs.rs 的 `vte4/src/terminal.rs` 源码），`glib::Pid` 不是 i32，直接赋值报 `E0308` |
+| 2026-11-26 | 侧栏用 `gtk::Paned`（水平），左侧终端、右侧侧栏；最小宽度靠 `sidebar.widget().set_size_request(260, -1)` + `set_shrink_end_child(false)` 实现 | 任务书要求默认 360、最小 260；`gtk::Paned` 不会把子控件压到它的最小宽度以下，比在 `notify::position` 里手工夹取简单可靠 |
+| 2026-11-26 | 侧栏设置存 `~/.config/mengos/feather-terminal.toml`，用 `serde` + `toml 1.x`，字段加 `#[serde(default)]`，宽度夹取 `[260, 1200]`，坏文件退回默认值 + stderr 警告 | 任务书 T12 明确要求用 serde + toml、目录不存在要创建、文件损坏不能崩；`#[serde(default)]` 让旧版本文件少字段也能读 |
+| 2026-11-26 | 侧栏 6 个页面拆成 `src/sidebar/{changes,network,files,assistant,profile,vault}.rs`，每个模块导出 `ID`/`TITLE`/`ICON` 与 `build()`/`set_current_dir()`；`sidebar/mod.rs` 用 `PageModule` 表拼装 | 任务书要求「每个页面一个模块，对外提供创建页面和目录变化两个函数，后续任务只改对应模块」，这样 T13–T16 互不干扰 |
+| 2026-11-26 | 侧栏图标按钮用 `gtk::ToggleButton` + `set_group`（同一时间只有一个按下），图标经 CI 核实存在（Adwaita + elementary-xfce） | 任务书要求确认图标名在主题里存在；`set_group` 是 GTK 保证单选的标准做法，不用自己维护状态 |
+| 2026-11-26 | 「点侧栏按钮后焦点回到终端」用 `GestureClick`（`PropagationPhase::Capture`）的 `released`，不用 `clicked` 信号 | GTK4 的 `GtkToggleButton` 只有 `toggled` 信号；点已经按下的按钮不会触发 `toggled`，但那时同样需要把焦点还给终端 |
+| 2026-11-26 | 侧栏宽度只在「切换显示状态」和「关窗」时写盘 | 拖动分隔线时每像素写一次文件既浪费又可能卡顿；用户正常使用不会在拖动后立即断电 |
