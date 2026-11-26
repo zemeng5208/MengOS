@@ -77,12 +77,12 @@ pub fn parse_ipv6(hex: &str) -> Option<String> {
     Some(std::net::Ipv6Addr::from(bytes).to_string())
 }
 
-/// 解析端口（4 位十六进制，大端），例如 `1F90` → 8000。
+/// 解析端口（4 位十六进制，大端），例如 `1F40` → 8000。
 pub fn parse_port(hex: &str) -> Option<u16> {
     u16::from_str_radix(hex, 16).ok()
 }
 
-/// 解析 `地址:端口` 字段，例如 `0100007F:1F90` → (`127.0.0.1`, 8000)。
+/// 解析 `地址:端口` 字段，例如 `0100007F:1F40` → (`127.0.0.1`, 8000)。
 pub fn parse_address(field: &str, ipv6: bool) -> Option<(String, u16)> {
     let (address, port) = field.split_once(':')?;
     let ip = if ipv6 {
@@ -228,7 +228,8 @@ mod tests {
 
     #[test]
     fn port_hex_is_big_endian() {
-        assert_eq!(parse_port("1F90"), Some(8000));
+        assert_eq!(parse_port("1F40"), Some(8000));
+        assert_eq!(parse_port("1F90"), Some(8080));
         assert_eq!(parse_port("01BB"), Some(443));
         assert_eq!(parse_port("0050"), Some(80));
         assert_eq!(parse_port("ZZZZ"), None);
@@ -237,7 +238,7 @@ mod tests {
     #[test]
     fn address_field_splits_ip_and_port() {
         assert_eq!(
-            parse_address("0100007F:1F90", false),
+            parse_address("0100007F:1F40", false),
             Some(("127.0.0.1".to_string(), 8000))
         );
         assert_eq!(
