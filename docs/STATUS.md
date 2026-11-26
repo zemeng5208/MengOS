@@ -16,7 +16,7 @@
 | T11 多标签 + 搜索 + 当前目录跟踪 | 已完成（等待验收） | 2026-11-26 | 6930f93（squash 合并，PR #11） | ① 多标签：`gtk::Notebook`，每个标签一个独立 `vte4::Terminal` + 独立 zsh 进程（各自 `spawn_async`），标签标题显示当前目录最后一级、带关闭按钮；`Ctrl+Shift+T` 新建、`Ctrl+Shift+W` 关闭、`Ctrl+PageUp/PageDown` 循环切换；shell `exit` 只关当前标签，关掉最后一个才关窗；② 搜索：`gtk::SearchBar` + `SearchEntry`，`Ctrl+Shift+F` 开关，回车下一个 / `Shift+回车` 上一个 / `Esc` 关闭后焦点回终端，输入先经 `escape_regex` 转义成字面量，找不到时输入框标红显示「未找到」；③ 当前目录跟踪：`spawn_async` 回调拿 PID，`glib::timeout_add_seconds_local(1, …)` 每秒 `readlink /proc/<pid>/cwd`，标签标题与窗口标题（`FeatherTerminal 0.0.1+<run> — <目录>`）同步更新；④ 纯逻辑抽到新模块 `src/model.rs`（`title_from_path`、`escape_regex`）并加 6 个单元测试；⑤ CI 实测：`check` job 输出 `7 passed; 0 failed` 与 `6 passed; 0 failed`，clippy `-D warnings`、`cargo fmt --check` 均通过；`gui-smoke` 截图 `shot-tabs.png` 里有两个标签 `home` / `tmp`，窗口标题 `FeatherTerminal 0.0.1+34 — /tmp`；合并后 main 的 run#35 三个 job 全 success，`publish-deb` 产出 `feather-terminal_0.0.1+35_amd64.deb`（182,680 字节），`dev-latest` 已同步为 182,680 字节 |
 | T12 右侧侧栏骨架 | 已完成（等待验收） | 2026-11-26 | b0120c7（squash 合并，PR #12） | ① 窗口改成 `gtk::Paned` 左右分栏：左边 T11 的标签页终端，右边侧栏；默认 360 像素、最小 260 像素（`set_size_request(260, -1)` + `set_shrink_end_child(false)`），可拖动；`Ctrl+Shift+B` 显示/隐藏（`win.toggle-sidebar` 动作 + accelerator）；② 宽度与显示状态存 `~/.config/mengos/feather-terminal.toml`（`serde` + `toml` 1.x，`#[serde(default)]`，宽度夹取 `[260,1200]`，目录自动创建，坏文件退回默认值并在 stderr 打警告），新模块 `src/settings.rs` 带 6 个单元测试；③ 侧栏 = 上方 `gtk::Stack` 6 页 + 左下角 6 个 `gtk::ToggleButton`（`set_group` 保证只有一个按下、悬停显示页面名）；④ 6 页按顺序拆成 `src/sidebar/{changes,network,files,assistant,profile,vault}.rs`，每个模块提供 `build()` 与 `set_current_dir()`，`sidebar/mod.rs` 负责拼装与分发当前目录；⑤ 点侧栏按钮后用 `GestureClick`（捕获阶段）把键盘焦点还给终端；⑥ **图标全部经 CI 核实存在**：`document-edit-symbolic`、`network-wired-symbolic`、`folder-symbolic`、`dialog-information-symbolic`、`avatar-default-symbolic`、`dialog-password-symbolic`（前五个 Adwaita + elementary-xfce 都有，`avatar-default-symbolic` 只在 Adwaita）；⑦ CI 实测：`7 passed` + `12 passed`（model 6 + settings 6）共 19 个测试，clippy/格式通过；`shot-sidebar.png` 显示右侧「文件树 / 当前目录：/github/home / 尚未实现（T13）」+ 左下角 6 个图标按钮（第 3 个高亮、tooltip「文件树」），`shot-sidebar-hidden.png` 显示侧栏隐藏后终端占满窗口；main run#38 三个 job 全 success，`feather-terminal_0.0.1+38_amd64.deb` 283,232 字节（`dev-latest` 已同步） |
 | T13 侧栏：文件树与预览 | 已完成（等待验收） | 2026-11-26 | 127235d（squash 合并，PR #13） | ① 文件树用 `gtk::ListView` + `gtk::TreeListModel` + `glib::BoxedAnyObject` 存条目；展开文件夹时才由 `create_func` 去读它的内容（懒加载）；② 读目录/查 MIME/读文件全部在 `std::thread` 里做，用 `async-channel` 把结果送回主线程（主线程不碰文件系统）；③ 文件夹在前、按名称排序（不区分大小写再按原名）、隐藏文件默认不显示（顶部开关）、超过 2000 项截断并显示「已截断」、有「刷新」按钮、终端目录变化自动跟随；④ 预览区（垂直 `gtk::Paned` 分隔）：文本按 `standard::content-type` 判断后等宽只读显示前 200KB（超出标「文件过大，仅显示前 200KB」）、图片用 `gtk::Picture`（>32MB 不解码）、二进制显示「二进制文件，无法预览」+类型+大小、读失败显示具体错误；⑤ 右键/「···」菜单：默认程序打开（`.html`/`.htm` 显示为「在默认浏览器中打开」）、`org.freedesktop.FileManager1.ShowItems` 在文件管理器中显示（失败退回 `thunar <目录>`）、复制路径；⑥ 双击文件夹只改文件树（顶部「正在浏览：…（与终端目录不同）」+「回到终端目录」），不动终端目录；⑦ `files/model.rs` 8 个纯函数单元测试（排序/截断/隐藏/大小/类型/html）；⑧ CI 实测：`7 passed` + `20 passed`（12 旧 + 8 新），clippy/格式通过；`shot-files.png` 显示 `/etc` 下 alternatives、apt、bash_completion.d、ca-certificates、cron.daily… 等目录带展开箭头；⑨ `app.log` 里能看到真实读取记录：`文件树：/etc 读到 108 项`、`文件树：/tmp 读到 2 项`、`文件树：/github/home 读到 0 项`（家目录只有隐藏文件）；main run#43 三个 job 全 success，`feather-terminal_0.0.1+43_amd64.deb` 359,688 字节 |
-| T14 侧栏：文件更改（Git Diff） | 未开始 | — | — | — |
+| T14 侧栏：文件更改（Git Diff） | 已完成（等待验收） | 2026-11-26 | 83f6488（squash 合并，PR #14） | ① 后台跑 `git -C <当前目录> rev-parse --show-toplevel` 判断仓库：不是仓库显示任务书原话「当前目录不是 Git 仓库，无法显示文件更改。（非 Git 文件需要基线快照才能对比，本功能暂不支持）」，没有 git 显示「未安装 git」；② 文件列表来自 `git status --porcelain=v1 -z`，`gtk::ListBox` 每行显示 `XY` 标记 + 路径（重命名显示「新 ← 旧」），顶部显示「N 个文件有更改」/「没有更改」；③ 单击文件后台跑 `git diff --no-color --no-ext-diff -- <路径>` 与加 `--cached` 的同一条命令，两段分别标「已暂存（git diff --cached）」「未暂存（git diff）」；未跟踪文件显示「新文件（未跟踪）」+ 内容（最多 200KB，全部按新增行）；④ `gtk::TextView` + `TextTag` 着色：`+` 绿底、`-` 红底、`@@` 蓝灰加粗、`diff --git`/`index`/`---`/`+++`/`\ No newline` 灰色，等宽只读；⑤ 超过 5000 行只显示前 5000 行并提示「已截断：只显示前 5000 行」；⑥ 页面可见时（`is_mapped()`）每 3 秒自动刷新列表，被 Stack 切走就不刷新；「刷新」按钮立即刷新；⑦ `changes/model.rs` 11 个纯函数单元测试（样例在 `tests/fixtures/`：空格文件名、中文文件名、重命名、删除、`MM`/`UU` 混合、空输入、diff 行分类、`+++`/`---` 不算增删、截断、未跟踪预览、多字节字符边界）；⑧ CI 实测：`7 passed` + `31 passed`（20 旧 + 11 新），clippy/格式通过；⑨ `shot-changes.png` 显示「文件更改 / 当前目录：/tmp/gitdemo / 2 个文件有更改 / M a.txt / ?? b.txt」，`shot-changes-diff.png` 显示 `== 未暂存（git diff） ==` 段：灰色 `diff --git`、`index`、`---`、`+++`，蓝灰加粗 `@@ -1,2 +1,2 @@`，` 第一行` 普通色，`+第二行` 绿色背景；main run#48 三个 job 全 success，`feather-terminal_0.0.1+48_amd64.deb` 380,752 字节 |
 | T15 侧栏：网络连接 | 未开始 | — | — | — |
 | T16 侧栏：个人资料 + 第二批收尾 | 未开始 | — | — | — |
 
@@ -34,9 +34,9 @@
 
 ## 当前任务
 
-第二批任务进行中：**T11、T12、T13 已完成并合并**（`6930f93`、`b0120c7`、`127235d`），等待验收（按用户要求，全部验收集中到最后一起做）。用户可以用 `mengos-update-terminal` 把 .deb 更新到 `0.0.1+43`（约 360KB，不用下 ISO），再按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8 逐条检查。
+第二批任务进行中：**T11、T12、T13、T14 已完成并合并**（`6930f93`、`b0120c7`、`127235d`、`83f6488`），等待验收（按用户要求，全部验收集中到最后一起做）。用户可以用 `mengos-update-terminal` 把 .deb 更新到 `0.0.1+48`（约 381KB，不用下 ISO），再按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8、T14 的 A0–A7 逐条检查。
 
-接下来做 **T14（侧栏：文件更改 / Git Diff）**。
+接下来做 **T15（侧栏：网络连接）**。
 
 ## 遇到的问题
 
@@ -74,12 +74,14 @@
 
 ## 下一步要执行的命令
 
-T13 已合并（`127235d`），开始 T14（侧栏文件更改 / Git Diff）。验收按用户要求集中到最后一起做；届时用户只需在 MengOS 里跑 `mengos-update-terminal`（从 `dev-latest` 下约 360KB 的 deb）就能拿到 `0.0.1+43`，按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8 检查多标签、搜索、目录跟踪、侧栏 6 页、文件树与预览。
+T14 已合并（`83f6488`），开始 T15（侧栏网络连接）。验收按用户要求集中到最后一起做；届时用户只需在 MengOS 里跑 `mengos-update-terminal`（从 `dev-latest` 下约 381KB 的 deb）就能拿到 `0.0.1+48`，按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8、T14 的 A0–A7 检查多标签、搜索、目录跟踪、侧栏 6 页、文件树与预览、Git diff。
 
 `powershell
 # 在 MengOS 里把 FeatherTerminal 更新到最新（不用下 ISO）
 mengos-update-terminal
 
 # 本地：看 T13 的 CI 证据
-gh run download 45764209976 --repo zemeng5208/MengOS --name gui-smoke --dir D:\MengOS\tmp\gui-smoke-t13b
+gh run download 45775908648 --repo zemeng5208/MengOS --name gui-smoke --dir D:\MengOS\tmp\gui-smoke-t14b
 `
+- T14 失败 3 次，都是真编译/检查错误：①`error[E0599]: no associated function or constant named new_with_buffer`——gtk4 0.11.5 里是 `gtk::TextView::with_buffer`；同时 clippy 报 `unused_mut`（`file.take(...)` 不需要 `mut`）；②clippy `-D warnings` 报 `truncate_lines` 从未被使用（只在测试里用）+ `explicit_auto_deref`（`*key` 改成 `key`）——把 `truncate_lines` 改成泛型并真正用于「先摊平再统一截断」，顺便修掉 deref；③gui-smoke 第一次虽然通过，但截图里侧栏还停在「文件树」页：`xdotool` 点的 (795,697) 落在第 1 个按钮的圆角外（只弹出了 tooltip 没触发点击），改成点按钮正中心 (803,710) 后正常切页。
+- T14 期间网络依旧不稳：多次 `git push` 报 `Failed to connect to github.com port 443`，靠重试循环（最多 12 次）解决；`gh run view` 的日志下载也偶发 TLS 握手超时，重试即可。
