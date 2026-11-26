@@ -105,6 +105,14 @@ jobs:
           printf '第二行\n' >> /tmp/gitdemo/a.txt
           printf '新文件\n' > /tmp/gitdemo/b.txt
           git -C /tmp/gitdemo status --porcelain=v1
+          # T15：客户端脚本单独写成文件，避免 xdotool 在 bash -euc '...' 里被单引号截断
+          cat > /tmp/netclient.py <<'PY'
+          import socket
+          import time
+
+          connection = socket.create_connection(("127.0.0.1", 8765))
+          time.sleep(30)
+          PY
           xvfb-run -a -s "-screen 0 1280x800x24" bash -euc '
             openbox &
             sleep 2
@@ -158,7 +166,7 @@ jobs:
             xdotool type --delay 100 "python3 -m http.server 8765 >/dev/null 2>&1 &"
             xdotool key Return
             sleep 2
-            xdotool type --delay 60 "python3 -c \"import socket,time;s=socket.create_connection(('127.0.0.1',8765));time.sleep(30)\" &"
+            xdotool type --delay 80 "python3 /tmp/netclient.py &"
             xdotool key Return
             sleep 5
             import -window root shot-network.png
