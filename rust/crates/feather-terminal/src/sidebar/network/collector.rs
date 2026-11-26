@@ -1,7 +1,6 @@
 //! 从 `/proc` 读真实的进程树和连接表。所有函数都在后台线程里调用。
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use super::model::{self, Protocol};
 
@@ -17,11 +16,13 @@ pub struct Connection {
     /// 远端地址:端口
     pub remote: String,
     pub state: &'static str,
+    /// 这一条是不是「监听中的端口」（由 /proc/net 的状态码判定）
+    pub listening: bool,
 }
 
 impl Connection {
     pub fn is_listening(&self) -> bool {
-        self.state == "LISTEN"
+        self.listening
     }
 }
 
@@ -59,6 +60,7 @@ pub fn snapshot(root_pid: i32) -> Snapshot {
                 local: entry.local,
                 remote: entry.remote,
                 state: entry.state,
+                listening: entry.is_listening(),
             });
         }
     }
@@ -81,24 +83,25 @@ pub fn snapshot(root_pid: i32) -> Snapshot {
 
 /// 从 `root` 出发，用 `/proc/*/stat` 的父进程号找出所有子孙进程。
 fn process_tree(root: i32) -> Vec<i32> {
-    let mut parents: Vec<(i32, i32)> = Vec::new();
+    // 把所有 /proc/<pid>/stat 拼成一张表再解析：内容第一个字段就是 PID
+    let mut table = String::new();
 
     if let Ok(entries) = std::fs::read_dir("/proc") {
         for entry in entries.flatten() {
-            let name = entry.file_name();
-            let Some(pid) = name.to_str().and_then(|text| text.parse::<i32>().ok()) else {
+            let Ok(content) = std::fs::read_to_string(entry.path().join("stat")) else {
                 continue;
             };
-            let stat_path = Path::new("/proc").join(&name).join("stat");
-            let Ok(content) = std::fs::read_to_string(stat_path) else {
+            if content.is_empty() {
                 continue;
-            };
-            if let Some(ppid) = model::parse_stat_ppid(&content) {
-                parents.push((pid, ppid));
+            }
+            table.push_str(&content);
+            if !content.ends_with('\n') {
+                table.push('\n');
             }
         }
     }
 
+    let parents = model::parse_proc_stat_table(&table);
     model::descendant_pids(&parents, root)
 }
 
