@@ -53,6 +53,7 @@ pub fn snapshot(root_pid: i32) -> Snapshot {
             let Some((process, pid)) = owners.get(&entry.inode) else {
                 continue;
             };
+            let listening = entry.is_listening();
             connections.push(Connection {
                 process: process.clone(),
                 pid: *pid,
@@ -60,7 +61,7 @@ pub fn snapshot(root_pid: i32) -> Snapshot {
                 local: entry.local,
                 remote: entry.remote,
                 state: entry.state,
-                listening: entry.is_listening(),
+                listening,
             });
         }
     }
