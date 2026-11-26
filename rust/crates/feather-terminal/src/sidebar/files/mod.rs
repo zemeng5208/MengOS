@@ -267,6 +267,7 @@ fn load_root(state: &Rc<FilesState>, dir: &Path) {
         ));
     });
 
+    let dir_text = dir.display().to_string();
     let state_weak = Rc::downgrade(state);
     glib::spawn_future_local(async move {
         let Ok(result) = receiver.recv().await else {
@@ -277,7 +278,7 @@ fn load_root(state: &Rc<FilesState>, dir: &Path) {
         };
         match result {
             Ok((entries, truncated)) => {
-                eprintln!("文件树：{} 读到 {} 项", dir.display(), entries.len());
+                eprintln!("文件树：{dir_text} 读到 {} 项", entries.len());
                 state.tree.fill(&entries);
                 if truncated {
                     state.truncated_label.set_text(&format!(
