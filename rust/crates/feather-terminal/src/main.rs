@@ -125,6 +125,13 @@ struct State {
     next_tab_id: Cell<u64>,
 }
 
+thread_local! {
+    /// 保住 `State`。所有信号回调都只持 `Weak<State>`（避免引用环），
+    /// 如果这里不存一个强引用，`build_ui` 一返回 `State` 就被回收，
+    /// 定时器和动作处理器会全部变成空操作。
+    static STATE: RefCell<Option<Rc<State>>> = const { RefCell::new(None) };
+}
+
 fn main() {
     let application = gtk::Application::new(Some("com.mengos.FeatherTerminal"), Default::default());
     application.connect_activate(build_ui);
@@ -188,6 +195,7 @@ fn build_ui(application: &gtk::Application) {
         tabs: RefCell::new(Vec::new()),
         next_tab_id: Cell::new(1),
     });
+    STATE.with(|slot| *slot.borrow_mut() = Some(Rc::clone(&state)));
 
     for action in actions.all() {
         window.add_action(action);
