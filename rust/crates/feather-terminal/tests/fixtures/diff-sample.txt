@@ -1,0 +1,9 @@
+diff --git a/a.txt b/a.txt
+index 1111111..2222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,2 @@
+ 第一行
+-旧第二行
+\ No newline at end of file
++新第二行
