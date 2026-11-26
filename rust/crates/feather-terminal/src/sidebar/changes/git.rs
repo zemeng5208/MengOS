@@ -150,7 +150,7 @@ pub fn load_file_diff(root: &Path, entry: &ChangeEntry) -> Result<FileDiff, Stri
 
 /// 读文件开头最多 `max + 4` 字节（多读几个字节用来判断有没有截断）。
 fn read_head(path: &Path, max: usize) -> Result<String, String> {
-    let mut file =
+    let file =
         std::fs::File::open(path).map_err(|error| format!("读不了 {}：{error}", path.display()))?;
     let mut buffer = Vec::new();
     file.take(max as u64 + 4)

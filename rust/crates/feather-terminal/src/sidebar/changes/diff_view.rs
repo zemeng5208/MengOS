@@ -56,7 +56,7 @@ impl DiffView {
             ],
         );
 
-        let view = gtk::TextView::new_with_buffer(&buffer);
+        let view = gtk::TextView::with_buffer(&buffer);
         view.set_editable(false);
         view.set_cursor_visible(false);
         view.set_monospace(true);
