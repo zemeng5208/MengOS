@@ -19,18 +19,28 @@ use gtk::prelude::*;
 /// 「当前目录变了」的回调（每个页面自己决定怎么用）。
 pub type DirCallback = Rc<dyn Fn(Option<&Path>)>;
 
+/// 「当前标签的 shell 进程号变了」的回调（切标签、新开标签时触发）。
+pub type PidCallback = Rc<dyn Fn(Option<i32>)>;
+
 /// 一页侧栏：标题 + 「当前目录」那一行 + 页面自己的内容。
 pub struct PageView {
     pub root: gtk::Box,
     pub cwd_label: gtk::Label,
     /// 页面自己的「当前目录变化」处理（占位页面什么都不做）
     pub on_dir_changed: DirCallback,
+    /// 页面自己的「当前标签 shell PID 变化」处理（占位页面什么都不做）
+    pub on_pid_changed: PidCallback,
 }
 
 impl PageView {
     /// 通知这一页「当前目录变了」。
     pub fn dir_changed(&self, dir: Option<&Path>) {
         (*self.on_dir_changed)(dir);
+    }
+
+    /// 通知这一页「当前标签的 shell 进程号变了」。
+    pub fn pid_changed(&self, pid: Option<i32>) {
+        (*self.on_pid_changed)(pid);
     }
 }
 
@@ -159,6 +169,7 @@ impl Sidebar {
             modules,
         });
         sidebar.set_current_dir(None);
+        sidebar.set_current_pid(None);
         sidebar
     }
 
@@ -171,6 +182,15 @@ impl Sidebar {
     pub fn set_current_dir(&self, dir: Option<&Path>) {
         for (module, page) in self.modules.iter().zip(self.pages.iter()) {
             (module.set_current_dir)(page, dir);
+        }
+    }
+
+    /// 切换标签之后调用：告诉每一页「当前标签的 shell 进程号」。
+    ///
+    /// 网络页要按这个 PID 找出整棵进程树，才知道该显示哪些连接。
+    pub fn set_current_pid(&self, pid: Option<i32>) {
+        for page in &self.pages {
+            page.pid_changed(pid);
         }
     }
 
@@ -225,6 +245,7 @@ fn build_placeholder_page(title: &str, placeholder: &str) -> PageView {
         root,
         cwd_label,
         on_dir_changed: Rc::new(|_| {}),
+        on_pid_changed: Rc::new(|_| {}),
     }
 }
 

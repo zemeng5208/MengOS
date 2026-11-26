@@ -242,6 +242,8 @@ pub fn build() -> PageView {
         root,
         cwd_label,
         on_dir_changed,
+        // 文件树页只关心目录，PID 变化不用管
+        on_pid_changed: Rc::new(|_| {}),
     }
 }
 
