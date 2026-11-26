@@ -64,7 +64,27 @@ jobs:
         run: |
           apt-get update
           apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config \
-            xvfb xauth imagemagick xdotool dbus-x11 fonts-noto-cjk zsh openbox
+            xvfb xauth imagemagick xdotool dbus-x11 fonts-noto-cjk zsh openbox \
+            adwaita-icon-theme elementary-xfce-icon-theme
+      - name: 检查侧栏图标在图标主题里是否存在
+        run: |
+          set -u
+          missing=0
+          for icon in document-edit-symbolic network-wired-symbolic folder-symbolic \
+                      dialog-information-symbolic avatar-default-symbolic dialog-password-symbolic; do
+            hits=$(find /usr/share/icons -type f \( -name "${icon}.svg" -o -name "${icon}.png" \) 2>/dev/null | head -n 3)
+            if [ -z "$hits" ]; then
+              echo "MISSING: $icon"
+              missing=1
+            else
+              echo "OK: $icon"
+              echo "$hits" | sed 's/^/    /'
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "有图标在图标主题里不存在，需要换名字"
+            exit 1
+          fi
       - name: 编译 release 版 FeatherTerminal
         run: cargo build --release -p feather-terminal
       - name: 虚拟显示器里启动、输入命令、截图
@@ -89,6 +109,16 @@ jobs:
             echo "找到窗口：$WIN"
             xdotool windowactivate --sync "$WIN" || xdotool windowfocus --sync "$WIN" || true
             sleep 1
+            # T12：侧栏默认显示。先按 Ctrl+Shift+B 隐藏、再显示回来，两张截图作证据
+            xdotool key --clearmodifiers ctrl+shift+b
+            sleep 1
+            import -window root shot-sidebar-hidden.png
+            xdotool key --clearmodifiers ctrl+shift+b
+            sleep 1
+            # 点侧栏左下角第 3 个图标（文件树），页面应当切到「尚未实现（T13）」
+            xdotool mousemove 875 697 click 1
+            sleep 2
+            import -window root shot-sidebar.png
             xdotool type --delay 100 "echo hello-from-ci"
             xdotool key Return
             sleep 3
@@ -104,13 +134,15 @@ jobs:
             echo "== FeatherTerminal 自己的输出（含按键调试）=="
             cat app.log || true
           '
-          ls -l shot-start.png shot-echo.png shot-tabs.png
+          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-echo.png shot-tabs.png
       - name: 上传截图
         uses: actions/upload-artifact@v4
         with:
           name: gui-smoke
           path: |
             rust/shot-start.png
+            rust/shot-sidebar-hidden.png
+            rust/shot-sidebar.png
             rust/shot-echo.png
             rust/shot-tabs.png
           if-no-files-found: error
