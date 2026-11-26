@@ -15,7 +15,7 @@
 | T10 收尾与提速 | 已完成（等待验收） | 2026-11-21 | bbcc68e（squash 合并）、bb7cc45（修 publish-deb） | ① 分支清理：`git fetch --prune` 后远端只剩 `origin/main`（`task/T2-ci`…`task/T9-terminal-iso`、`fix/acceptance-1`、`tmp/T6-probe` 在之前 squash 合并时已被 `--delete-branch` 删除），本地删掉 `tmp/T6-probe`（was `f39a318`），无未合并分支；② `build-iso` 的 `push` 触发自 T3 起就只限 `main`，PR 推送只触发一次，无需修改；顺手把 `rust.yml` 的 `branches: ["**"]` 收窄为 `[main]`；③ 安装器改名：CI 实测 `.desktop` 路径 `/usr/share/applications/calamares-install-debian.desktop`，由 `/etc/xdg/autostart/calamares-desktop-icon.desktop` 调 `/usr/bin/add-calamares-desktop-icon` 复制到桌面；hook 改名后日志原文 `4:Name=安装 MengOS`、`5:Name[zh_CN]=安装 MengOS`、`8:Comment=将 MengOS 安装到硬盘`、`OK: 安装器图标已改名为「安装 MengOS」`；④ deb 快速通道：`dev-latest` 预发布已建（prerelease=true），含 `feather-terminal_latest_amd64.deb` 与 `feather-terminal_0.0.1+29_amd64.deb`，各 169,408 字节；ISO 内包清单原文 `106:feather-terminal	0.0.1+21`；⑤ `gui-smoke`：Xvfb + openbox + import + xdotool，截图标题 `FeatherTerminal 0.0.1+26`，输入 `echo hello-from-ci` 后回显 `hello-from-ci`；⑥ 新 ISO `MengOS-0.0.1-dev.21-amd64.iso` 1.8G，SHA256 `9c253e9f3d6821a0ced443291708d65fabdefc5846bc7610beede740769a21b6`（run#21 / 44919431401，两个 job 均 success） |
 | T11 多标签 + 搜索 + 当前目录跟踪 | 已完成（等待验收） | 2026-11-26 | 6930f93（squash 合并，PR #11） | ① 多标签：`gtk::Notebook`，每个标签一个独立 `vte4::Terminal` + 独立 zsh 进程（各自 `spawn_async`），标签标题显示当前目录最后一级、带关闭按钮；`Ctrl+Shift+T` 新建、`Ctrl+Shift+W` 关闭、`Ctrl+PageUp/PageDown` 循环切换；shell `exit` 只关当前标签，关掉最后一个才关窗；② 搜索：`gtk::SearchBar` + `SearchEntry`，`Ctrl+Shift+F` 开关，回车下一个 / `Shift+回车` 上一个 / `Esc` 关闭后焦点回终端，输入先经 `escape_regex` 转义成字面量，找不到时输入框标红显示「未找到」；③ 当前目录跟踪：`spawn_async` 回调拿 PID，`glib::timeout_add_seconds_local(1, …)` 每秒 `readlink /proc/<pid>/cwd`，标签标题与窗口标题（`FeatherTerminal 0.0.1+<run> — <目录>`）同步更新；④ 纯逻辑抽到新模块 `src/model.rs`（`title_from_path`、`escape_regex`）并加 6 个单元测试；⑤ CI 实测：`check` job 输出 `7 passed; 0 failed` 与 `6 passed; 0 failed`，clippy `-D warnings`、`cargo fmt --check` 均通过；`gui-smoke` 截图 `shot-tabs.png` 里有两个标签 `home` / `tmp`，窗口标题 `FeatherTerminal 0.0.1+34 — /tmp`；合并后 main 的 run#35 三个 job 全 success，`publish-deb` 产出 `feather-terminal_0.0.1+35_amd64.deb`（182,680 字节），`dev-latest` 已同步为 182,680 字节 |
 | T12 右侧侧栏骨架 | 已完成（等待验收） | 2026-11-26 | b0120c7（squash 合并，PR #12） | ① 窗口改成 `gtk::Paned` 左右分栏：左边 T11 的标签页终端，右边侧栏；默认 360 像素、最小 260 像素（`set_size_request(260, -1)` + `set_shrink_end_child(false)`），可拖动；`Ctrl+Shift+B` 显示/隐藏（`win.toggle-sidebar` 动作 + accelerator）；② 宽度与显示状态存 `~/.config/mengos/feather-terminal.toml`（`serde` + `toml` 1.x，`#[serde(default)]`，宽度夹取 `[260,1200]`，目录自动创建，坏文件退回默认值并在 stderr 打警告），新模块 `src/settings.rs` 带 6 个单元测试；③ 侧栏 = 上方 `gtk::Stack` 6 页 + 左下角 6 个 `gtk::ToggleButton`（`set_group` 保证只有一个按下、悬停显示页面名）；④ 6 页按顺序拆成 `src/sidebar/{changes,network,files,assistant,profile,vault}.rs`，每个模块提供 `build()` 与 `set_current_dir()`，`sidebar/mod.rs` 负责拼装与分发当前目录；⑤ 点侧栏按钮后用 `GestureClick`（捕获阶段）把键盘焦点还给终端；⑥ **图标全部经 CI 核实存在**：`document-edit-symbolic`、`network-wired-symbolic`、`folder-symbolic`、`dialog-information-symbolic`、`avatar-default-symbolic`、`dialog-password-symbolic`（前五个 Adwaita + elementary-xfce 都有，`avatar-default-symbolic` 只在 Adwaita）；⑦ CI 实测：`7 passed` + `12 passed`（model 6 + settings 6）共 19 个测试，clippy/格式通过；`shot-sidebar.png` 显示右侧「文件树 / 当前目录：/github/home / 尚未实现（T13）」+ 左下角 6 个图标按钮（第 3 个高亮、tooltip「文件树」），`shot-sidebar-hidden.png` 显示侧栏隐藏后终端占满窗口；main run#38 三个 job 全 success，`feather-terminal_0.0.1+38_amd64.deb` 283,232 字节（`dev-latest` 已同步） |
-| T13 侧栏：文件树与预览 | 未开始 | — | — | — |
+| T13 侧栏：文件树与预览 | 已完成（等待验收） | 2026-11-26 | 127235d（squash 合并，PR #13） | ① 文件树用 `gtk::ListView` + `gtk::TreeListModel` + `glib::BoxedAnyObject` 存条目；展开文件夹时才由 `create_func` 去读它的内容（懒加载）；② 读目录/查 MIME/读文件全部在 `std::thread` 里做，用 `async-channel` 把结果送回主线程（主线程不碰文件系统）；③ 文件夹在前、按名称排序（不区分大小写再按原名）、隐藏文件默认不显示（顶部开关）、超过 2000 项截断并显示「已截断」、有「刷新」按钮、终端目录变化自动跟随；④ 预览区（垂直 `gtk::Paned` 分隔）：文本按 `standard::content-type` 判断后等宽只读显示前 200KB（超出标「文件过大，仅显示前 200KB」）、图片用 `gtk::Picture`（>32MB 不解码）、二进制显示「二进制文件，无法预览」+类型+大小、读失败显示具体错误；⑤ 右键/「···」菜单：默认程序打开（`.html`/`.htm` 显示为「在默认浏览器中打开」）、`org.freedesktop.FileManager1.ShowItems` 在文件管理器中显示（失败退回 `thunar <目录>`）、复制路径；⑥ 双击文件夹只改文件树（顶部「正在浏览：…（与终端目录不同）」+「回到终端目录」），不动终端目录；⑦ `files/model.rs` 8 个纯函数单元测试（排序/截断/隐藏/大小/类型/html）；⑧ CI 实测：`7 passed` + `20 passed`（12 旧 + 8 新），clippy/格式通过；`shot-files.png` 显示 `/etc` 下 alternatives、apt、bash_completion.d、ca-certificates、cron.daily… 等目录带展开箭头；⑨ `app.log` 里能看到真实读取记录：`文件树：/etc 读到 108 项`、`文件树：/tmp 读到 2 项`、`文件树：/github/home 读到 0 项`（家目录只有隐藏文件）；main run#43 三个 job 全 success，`feather-terminal_0.0.1+43_amd64.deb` 359,688 字节 |
 | T14 侧栏：文件更改（Git Diff） | 未开始 | — | — | — |
 | T15 侧栏：网络连接 | 未开始 | — | — | — |
 | T16 侧栏：个人资料 + 第二批收尾 | 未开始 | — | — | — |
@@ -34,9 +34,9 @@
 
 ## 当前任务
 
-第二批任务进行中：**T11、T12 已完成并合并**（`6930f93`、`b0120c7`），等待验收（按用户要求，全部验收集中到最后一起做）。用户可以用 `mengos-update-terminal` 把 .deb 更新到 `0.0.1+38`（约 280KB，不用下 ISO），再按任务书 T11 的 A0–A7、T12 的 A0–A6 逐条检查。
+第二批任务进行中：**T11、T12、T13 已完成并合并**（`6930f93`、`b0120c7`、`127235d`），等待验收（按用户要求，全部验收集中到最后一起做）。用户可以用 `mengos-update-terminal` 把 .deb 更新到 `0.0.1+43`（约 360KB，不用下 ISO），再按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8 逐条检查。
 
-接下来做 **T13（侧栏：文件树与预览）**。
+接下来做 **T14（侧栏：文件更改 / Git Diff）**。
 
 ## 遇到的问题
 
@@ -52,6 +52,9 @@
 - 每次 push 到带 PR 的分支会同时触发 `push` 与 `pull_request`，`build-iso` 因此会跑两遍（每遍约 13 分钟）。若以后觉得浪费，可在 `build-iso.yml` 去掉 `pull_request` 触发。
 - 验收发现的三个问题都属于「文件在 ISO 里、但运行时没生效」，教训是：**配置类改动必须有构建时诊断**（本轮临时加了 `0310-mengos-diag` hook，把 chroot 里的壁纸文件、系统级/用户级 xfconf、SVG 加载器、桌面快捷方式、VMware 剪贴板文件全部打印出来，才定位到是 `monitor0` 与实际输出名 `Virtual-1` 不匹配）。诊断 hook 用完已删。
 - `vte4` 的 `reset()` 需要两个参数（`reset(clear_tabstops, clear_history)`），我第一版写成无参，靠 docs.rs 0.10.0 的签名核对后修掉，没让这轮构建失败。
+- T13 一共失败 3 次，全部按 CI 原文修：①`error[E0308]: expected Option<&str>, found &str`——`gio::Menu::append` 的两个参数都是 `Option<&str>`（不是 `&str`），三处都包一层 `Some(…)`；②`error[E0599]: no method named query_info found for struct gio::File`——`FileExt` 不在作用域，`model.rs` 里补 `use gtk::gio::prelude::*;`；`SignalListItemFactory` 的 `bind` 回调参数是 `&glib::Object`（不是 `&gtk::ListItem`），要先 `downcast_ref::<gtk::ListItem>()`；③`error[E0521]: borrowed data escapes outside of function`——在 `async move` 块里用 `dir.display()` 打印，`&Path` 活不过函数体，改成先 `dir.display().to_string()`。
+- T13 第一次 gui-smoke「全绿」但截图里文件树是空的（`shot-files.png` 空白、`app.log` 一条读取记录都没有）：根因是 `FilesState` 只被各回调的 `Weak` 持有，`build()` 返回即被回收（和 T11 的 `State` 被丢弃同一个坑）。改成由 `PageView.on_dir_changed` 持强引用后，`app.log` 出现真实记录 `文件树：/etc 读到 108 项`，截图里 `/etc` 的目录正常列出。教训：**GUI 任务的 CI 绿灯不等于功能生效，必须看截图内容和程序自身日志**。
+- T13 期间 `git push` 网络抖动明显（有一次连试 12 次才成功，多次 `exit: 128`），已用重试循环 + 退避处理，未影响最终结果。
 - 用户反馈「终端里粘贴不了」时，先用 `open-vm-tools`/`open-vm-tools-desktop 2:12.5.0-2+deb13u1` 的安装日志与 Debian 文件清单确认虚拟机侧齐全（含 `/etc/xdg/autostart/vmware-user.desktop`、`/usr/bin/vmware-user-suid-wrapper`），再把范围收敛到「终端没有右键菜单」这个真实缺陷上。
 
 - T10 的 `publish-deb` 第一次在 main 上失败，日志原文：`failed to run git: fatal: detected dubious ownership in repository at '/__w/MengOS/MengOS'`——容器里 checkout 的属主与运行用户不同，`gh` 调用 git 时被 git 拒绝。修法：加一步 `git config --global --add safe.directory "$GITHUB_WORKSPACE"`，并给 gh 步骤设 `GH_REPO`；之后 run#29 的 `check`/`gui-smoke`/`publish-deb` 全 success。
@@ -71,4 +74,12 @@
 
 ## 下一步要执行的命令
 
-T12 已合并（`b0120c7`），开始 T13（侧栏文件树与预览）。验收按用户要求集中到最后一起做；届时用户只需在 MengOS 里跑 `mengos-update-terminal`（从 `dev-latest` 下约 280KB 的 deb）就能拿到 `0.0.1+38`，按任务书 T11 的 A0–A7、T12 的 A0–A6 检查多标签、搜索、目录跟踪、侧栏 6 页与快捷键。
+T13 已合并（`127235d`），开始 T14（侧栏文件更改 / Git Diff）。验收按用户要求集中到最后一起做；届时用户只需在 MengOS 里跑 `mengos-update-terminal`（从 `dev-latest` 下约 360KB 的 deb）就能拿到 `0.0.1+43`，按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8 检查多标签、搜索、目录跟踪、侧栏 6 页、文件树与预览。
+
+`powershell
+# 在 MengOS 里把 FeatherTerminal 更新到最新（不用下 ISO）
+mengos-update-terminal
+
+# 本地：看 T13 的 CI 证据
+gh run download 45764209976 --repo zemeng5208/MengOS --name gui-smoke --dir D:\MengOS\tmp\gui-smoke-t13b
+`

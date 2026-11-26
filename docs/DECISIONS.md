@@ -58,3 +58,10 @@
 | 2026-11-26 | 侧栏图标按钮用 `gtk::ToggleButton` + `set_group`（同一时间只有一个按下），图标经 CI 核实存在（Adwaita + elementary-xfce） | 任务书要求确认图标名在主题里存在；`set_group` 是 GTK 保证单选的标准做法，不用自己维护状态 |
 | 2026-11-26 | 「点侧栏按钮后焦点回到终端」用 `GestureClick`（`PropagationPhase::Capture`）的 `released`，不用 `clicked` 信号 | GTK4 的 `GtkToggleButton` 只有 `toggled` 信号；点已经按下的按钮不会触发 `toggled`，但那时同样需要把焦点还给终端 |
 | 2026-11-26 | 侧栏宽度只在「切换显示状态」和「关窗」时写盘 | 拖动分隔线时每像素写一次文件既浪费又可能卡顿；用户正常使用不会在拖动后立即断电 |
+| 2026-11-26 | 文件树用 `gtk::ListView` + `gtk::TreeListModel` + `glib::BoxedAnyObject`（条目塞进 `gio::ListStore`），不用自定义 GObject 子类 | 任务书要求 `gtk::ListView` + `gtk::TreeListModel`；`BoxedAnyObject` 能直接把普通 Rust struct 放进 GListModel，省掉一个 `glib::wrapper!` 子类（少一层 unsafe 样板）。`TreeListModel` 的 `create_func` 只在展开时才调用，天然满足「懒加载」 |
+| 2026-11-26 | 读目录 / 查 MIME / 读文件内容一律 `std::thread::spawn` + `async-channel::bounded(1)` + `glib::spawn_future_local` 回主线程 | 任务书要求「后台读取，不卡界面」。用 `std::thread` 而不是 `gio::spawn_blocking` 是为了不依赖 glib 的线程池行为，且 `async-channel` 的 `send_blocking` / `recv().await` 正好把「线程 → 主线程」这一步写成顺序代码，主线程不碰文件系统 |
+| 2026-11-26 | 页面状态 `FilesState` 由 `PageView.on_dir_changed` 这个闭包**强引用**持有，控件自己的信号回调只持 `Weak<FilesState>` | 第一次实现时所有回调都持弱引用，`build()` 一返回 `Rc<FilesState>` 就被丢弃，文件树永远是空的（CI 截图空白、`app.log` 里一条读取记录都没有）。改成「有一个强引用保活 + 其余弱引用」既不会让状态被回收，也不会形成「状态 → 控件 → 回调 → 状态」的引用环 |
+| 2026-11-26 | 文件操作菜单锚在预览区右上角的「···」按钮上（`gtk::PopoverMenu::from_model` + `insert_action_group("file", …)`），不按鼠标坐标手动摆放 | 右键时手动算坐标在不同缩放下容易跑偏；菜单由 `gio::Menu` 描述、动作走 `gio::SimpleAction`，和 T11 的 `win.*` 动作风格一致。右键（`GestureClick` 的 `BUTTON_SECONDARY`）只负责「选中该文件 + 弹出菜单」 |
+| 2026-11-26 | 「用默认程序打开」统一走 `gio::AppInfo::launch_default_for_uri`，`.html`/`.htm` 只是把菜单文案换成「在默认浏览器中打开」 | 任务书要求「不能自己写浏览器，用系统默认程序打开」；`launch_default_for_uri` 就是 xdg-open 的 GIO 路径。文案区分是任务书对 `.html` 的额外要求，行为不变 |
+| 2026-11-26 | 「在文件管理器中显示」先走 D-Bus `org.freedesktop.FileManager1.ShowItems`，失败再 `thunar <目录>` | 前者是桌面标准接口（Xfce 由 Thunar 实现，能高亮文件）；但服务不一定在（容器 / 精简系统），所以保留进程回退，保证按钮永远有反应 |
+| 2026-11-26 | 图片预览用 `gdk::Texture::from_bytes` + `gtk::Picture`，超过 32MB 的图片不解码，只提示大小 | 解码巨图会吃掉内存并卡住主线程；32MB 足以覆盖常见照片/截图。任务书只要求「图片文件能显示缩略图」 |
