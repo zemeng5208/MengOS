@@ -75,11 +75,13 @@ jobs:
           xvfb-run -a -s "-screen 0 1280x800x24" bash -euc '
             openbox &
             sleep 2
-            ./target/release/feather-terminal &
+            # MENGOS_DEBUG_KEYS=1：把收到的按键打到 app.log，方便排查快捷键问题
+            MENGOS_DEBUG_KEYS=1 ./target/release/feather-terminal >app.log 2>&1 &
             APP=$!
             sleep 8
             if ! kill -0 "$APP" 2>/dev/null; then
               echo "ERROR: FeatherTerminal 在 8 秒内退出了（启动即崩溃）"
+              cat app.log || true
               exit 1
             fi
             import -window root shot-start.png
@@ -92,13 +94,15 @@ jobs:
             sleep 3
             import -window root shot-echo.png
             # T11：新建标签页并在第二个标签里 cd /tmp，标签标题应变成 tmp
-            xdotool key ctrl+shift+t
+            xdotool key --clearmodifiers ctrl+shift+t
             sleep 2
             xdotool type --delay 100 "cd /tmp"
             xdotool key Return
             sleep 3
             import -window root shot-tabs.png
             kill "$APP" || true
+            echo "== FeatherTerminal 自己的输出（含按键调试）=="
+            cat app.log || true
           '
           ls -l shot-start.png shot-echo.png shot-tabs.png
       - name: 上传截图

@@ -225,28 +225,40 @@ fn install_shortcuts(state: &Rc<State>) {
         let ctrl = modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK);
         let shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
 
+        if std::env::var_os("MENGOS_DEBUG_KEYS").is_some() {
+            eprintln!("[keys] name={:?} ctrl={ctrl} shift={shift}", keyval.name());
+        }
+
+        // 按下 Shift 时 GDK 给的 keyval 是大写字母，没按 Shift 时是小写，
+        // 两种都接受，避免快捷键在某些键盘布局下失效。
+        let is_c = keyval == gtk::gdk::Key::C || keyval == gtk::gdk::Key::c;
+        let is_v = keyval == gtk::gdk::Key::V || keyval == gtk::gdk::Key::v;
+        let is_t = keyval == gtk::gdk::Key::T || keyval == gtk::gdk::Key::t;
+        let is_w = keyval == gtk::gdk::Key::W || keyval == gtk::gdk::Key::w;
+        let is_f = keyval == gtk::gdk::Key::F || keyval == gtk::gdk::Key::f;
+
         if ctrl && shift {
-            if keyval == gtk::gdk::Key::C {
+            if is_c {
                 if let Some(tab) = current_tab(&state) {
                     tab.terminal.copy_clipboard_format(vte4::Format::Text);
                 }
                 return glib::Propagation::Stop;
             }
-            if keyval == gtk::gdk::Key::V {
+            if is_v {
                 if let Some(tab) = current_tab(&state) {
                     tab.terminal.paste_clipboard();
                 }
                 return glib::Propagation::Stop;
             }
-            if keyval == gtk::gdk::Key::T {
+            if is_t {
                 new_tab(&state);
                 return glib::Propagation::Stop;
             }
-            if keyval == gtk::gdk::Key::W {
+            if is_w {
                 close_current_tab(&state);
                 return glib::Propagation::Stop;
             }
-            if keyval == gtk::gdk::Key::F {
+            if is_f {
                 toggle_search(&state);
                 return glib::Propagation::Stop;
             }
@@ -382,6 +394,9 @@ fn new_tab(state: &Rc<State>) -> Rc<Tab> {
     terminal.set_hexpand(true);
 
     let title_label = gtk::Label::new(Some("终端"));
+    // 只设 ellipsize 时 GTK 会把自然宽度算成省略号的宽度，标签会被压成「…」，
+    // 所以必须再给一个字符宽度（最少 12 个字符宽，超出的部分才省略）。
+    title_label.set_width_chars(12);
     title_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
     title_label.set_max_width_chars(20);
 
