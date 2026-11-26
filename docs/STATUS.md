@@ -13,7 +13,7 @@
 | T8 FeatherTerminal 第一版 | 已完成（用户暂缓验收） | 2026-11-18 | 2f5cdee（squash 合并） | 新 crate `feather-terminal`：`vte4 0.10.0` + `gtk4 0.11.5`，`cargo tree -i gtk4` 只有一个版本；`spawn_async` 启动 `/usr/bin/zsh`（回退 `$SHELL`→`/bin/bash`），shell 退出关窗，`Ctrl+Shift+C/V` 走 VTE 自带剪贴板；CI 全绿（release 编译 49.96s、clippy/格式/测试均通过），artifact `feather-terminal` 220,260 字节（解压后二进制 556,744 字节）；run 44213101804 |
 | T9 把 FeatherTerminal 装进 ISO | 已完成（用户暂缓验收） | 2026-11-18 | be5ad41（squash 合并） | `cargo-deb 3.8.0` 打出 `feather-terminal_0.0.1-1_amd64.deb`（156,204 字节）：内含 `./usr/bin/feather-terminal`（394,104 字节，0755）与 `./usr/share/applications/mengos-terminal.desktop`（210 字节）；控制信息 `Depends: libc6 …, libglib2.0-0t64 …, libgtk-4-1 …, libvte-2.91-gtk4-0 …, zsh`；`build-iso.yml` 拆成 `build-deb` + `build-iso`（`needs`）两个 job，deb 经 artifact 落到 `iso/config/packages.chroot/`；`.packages.txt` 原文 `106:feather-terminal\t0.0.1-1`（共 1359 行）；hook `0300-mengos-terminal-icon` 输出 `/etc/skel/Desktop/mengos-terminal.desktop` 为 `-rwxr-xr-x 210`，且 hook 运行时 `/home` 为空（Live 用户在其后创建，会继承图标）；**最终交付** `MengOS-0.0.1-dev.14-amd64.iso` 1.8G，SHA256 `99eb6704c73903dbb04a8387758498ceced3ec7e65a15e6ce8dc509e0fdfcd2b`（run#14 / 44217405996，main @ `be5ad41`，两个 job 均 success；分支上另有一次 `dev.13`，SHA256 `a9c8f23e6ab93c886d5bb58d517a1b79a1bf51a11e9b490535e3ee71b85c9de9`） |
 | T10 收尾与提速 | 已完成（等待验收） | 2026-11-21 | bbcc68e（squash 合并）、bb7cc45（修 publish-deb） | ① 分支清理：`git fetch --prune` 后远端只剩 `origin/main`（`task/T2-ci`…`task/T9-terminal-iso`、`fix/acceptance-1`、`tmp/T6-probe` 在之前 squash 合并时已被 `--delete-branch` 删除），本地删掉 `tmp/T6-probe`（was `f39a318`），无未合并分支；② `build-iso` 的 `push` 触发自 T3 起就只限 `main`，PR 推送只触发一次，无需修改；顺手把 `rust.yml` 的 `branches: ["**"]` 收窄为 `[main]`；③ 安装器改名：CI 实测 `.desktop` 路径 `/usr/share/applications/calamares-install-debian.desktop`，由 `/etc/xdg/autostart/calamares-desktop-icon.desktop` 调 `/usr/bin/add-calamares-desktop-icon` 复制到桌面；hook 改名后日志原文 `4:Name=安装 MengOS`、`5:Name[zh_CN]=安装 MengOS`、`8:Comment=将 MengOS 安装到硬盘`、`OK: 安装器图标已改名为「安装 MengOS」`；④ deb 快速通道：`dev-latest` 预发布已建（prerelease=true），含 `feather-terminal_latest_amd64.deb` 与 `feather-terminal_0.0.1+29_amd64.deb`，各 169,408 字节；ISO 内包清单原文 `106:feather-terminal	0.0.1+21`；⑤ `gui-smoke`：Xvfb + openbox + import + xdotool，截图标题 `FeatherTerminal 0.0.1+26`，输入 `echo hello-from-ci` 后回显 `hello-from-ci`；⑥ 新 ISO `MengOS-0.0.1-dev.21-amd64.iso` 1.8G，SHA256 `9c253e9f3d6821a0ced443291708d65fabdefc5846bc7610beede740769a21b6`（run#21 / 44919431401，两个 job 均 success） |
-| T11 多标签 + 搜索 + 当前目录跟踪 | 未开始 | — | — | — |
+| T11 多标签 + 搜索 + 当前目录跟踪 | 已完成（等待验收） | 2026-11-26 | 6930f93（squash 合并，PR #11） | ① 多标签：`gtk::Notebook`，每个标签一个独立 `vte4::Terminal` + 独立 zsh 进程（各自 `spawn_async`），标签标题显示当前目录最后一级、带关闭按钮；`Ctrl+Shift+T` 新建、`Ctrl+Shift+W` 关闭、`Ctrl+PageUp/PageDown` 循环切换；shell `exit` 只关当前标签，关掉最后一个才关窗；② 搜索：`gtk::SearchBar` + `SearchEntry`，`Ctrl+Shift+F` 开关，回车下一个 / `Shift+回车` 上一个 / `Esc` 关闭后焦点回终端，输入先经 `escape_regex` 转义成字面量，找不到时输入框标红显示「未找到」；③ 当前目录跟踪：`spawn_async` 回调拿 PID，`glib::timeout_add_seconds_local(1, …)` 每秒 `readlink /proc/<pid>/cwd`，标签标题与窗口标题（`FeatherTerminal 0.0.1+<run> — <目录>`）同步更新；④ 纯逻辑抽到新模块 `src/model.rs`（`title_from_path`、`escape_regex`）并加 6 个单元测试；⑤ CI 实测：`check` job 输出 `7 passed; 0 failed` 与 `6 passed; 0 failed`，clippy `-D warnings`、`cargo fmt --check` 均通过；`gui-smoke` 截图 `shot-tabs.png` 里有两个标签 `home` / `tmp`，窗口标题 `FeatherTerminal 0.0.1+34 — /tmp`；合并后 main 的 run#35 三个 job 全 success，`publish-deb` 产出 `feather-terminal_0.0.1+35_amd64.deb`（182,680 字节），`dev-latest` 已同步为 182,680 字节 |
 | T12 右侧侧栏骨架 | 未开始 | — | — | — |
 | T13 侧栏：文件树与预览 | 未开始 | — | — | — |
 | T14 侧栏：文件更改（Git Diff） | 未开始 | — | — | — |
@@ -34,7 +34,9 @@
 
 ## 当前任务
 
-第二批任务已开始：**T10 已完成**（合并 `bbcc68e`；`bb7cc45` 修好 `publish-deb`），等待用户用 `dev.21` 完整验收一次（A0–A11）。通过后开始 T11（多标签 + 搜索 + 当前目录跟踪，只改 rust，验收时用 `mengos-update-terminal` 更新 .deb，不用下 ISO）。
+第二批任务进行中：**T11 已完成并合并**（`6930f93`，PR #11），等待验收（按用户要求，全部验收集中到最后一起做）。用户可以用 `mengos-update-terminal` 把 .deb 更新到 `0.0.1+35`（约 180KB，不用下 ISO），再按 T11 的 A0–A7 逐条检查。
+
+接下来做 **T12（右侧侧栏骨架）**。
 
 ## 遇到的问题
 
@@ -57,7 +59,12 @@
 - 分支清理时发现远端 `task/T*`、`fix/acceptance-1`、`tmp/T6-probe` 早已被之前的 `gh pr merge --delete-branch` 删除，`git fetch --prune` 只是清掉本地残留引用；没有未合并的分支。
 - 更正上一轮汇报的一处说法：`build-iso.yml` 的 `push` 触发自 T3 起就只限 `main`，PR 推送只触发一次 build-iso；真正会双跑的是 `rust.yml`（`branches: ["**"]` + `pull_request`），本轮已收窄为 `[main]`。
 - `gui-smoke` 在 Xvfb 里需要窗口管理器才能把键盘焦点交给窗口：额外装了 `openbox`，先 `xdotool windowactivate` 再 `xdotool type`，截图里能看到 `hello-from-ci` 的回显。
+- T11 一共失败 3 次，全部按 CI 原文修，没有猜：
+  1. `error[E0308]: mismatched types … expected i32, found Pid`（`main.rs:552`）——`vte4::Terminal::spawn_async` 的回调给的是 `glib::Pid`（docs.rs 的 `vte4/terminal.rs` 源码里写着 `Result<glib::Pid, glib::Error>`），改用 `pid.into_glib()` 转成 i32。
+  2. 截图里标签标题被压成「…」——GTK4 的 `Label` 一旦设 `ellipsize`，它的自然宽度就按省略号宽度算，只给 `max_width_chars` 没用，必须再 `set_width_chars(12)` 给一个最小字符宽度。
+  3. 最关键的一个：截图里 `Ctrl+Shift+T` 不新建标签、标签标题也不跟着目录变。根因是 `build_ui` 里创建的 `Rc<State>` 在函数返回时就被回收了，而所有信号回调只持 `Weak<State>`（为了避开引用环），于是定时器第一次 upgrade 失败就 Break、动作处理器全部变成空操作。修法是加一个 `thread_local! { static STATE: RefCell<Option<Rc<State>>> }` 存强引用。**教训：gtk-rs 里用 `Weak` 回调时必须同时保证有强引用活着。**
+- 快捷键一开始是在窗口上挂 `EventControllerKey`（捕获阶段）自己判断 keyval，实测在 Xvfb + openbox 下不可靠（`app.log` 里一条按键调试都没打出来）。改成 GTK 惯用的 `application.set_accels_for_action("win.*", …)` 绑到窗口动作上，一次通过。
 
 ## 下一步要执行的命令
 
-等待用户按 T10 验收清单（A0–A11）验收：**本次需要下载 ISO**——`MengOS-0.0.1-dev.21-amd64.iso`（1.8G，SHA256 `9c253e9f3d6821a0ced443291708d65fabdefc5846bc7610beede740769a21b6`），Actions run#21（44919431401）→ Artifacts → `mengos-iso`。A10 的 `mengos-update-terminal` 会从 `dev-latest` 预发布下载约 170KB 的 deb（169,408 字节）。通过后回复「T10 通过」，我接着做 T11。
+T11 已合并（`6930f93`），开始 T12（右侧侧栏骨架）。验收按用户要求集中到最后一起做；届时用户只需在 MengOS 里跑 `mengos-update-terminal`（从 `dev-latest` 下约 180KB 的 deb）就能拿到 `0.0.1+35`，按任务书 T11 的 A0–A7 检查多标签、搜索、目录跟踪。

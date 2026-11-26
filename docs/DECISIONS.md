@@ -45,3 +45,10 @@
 | 2026-11-21 | CI 用 `Xvfb + openbox + imagemagick(import) + xdotool` 做 GUI 截图（`gui-smoke` job） | 第二批任务书第一部分第 2 条要求；截图只证明程序能启动、画面大致正确，**不代替用户验收** |
 | 2026-11-21 | 安装器图标只改 `.desktop` 的 `Name`/`Name[zh_CN]`/`Comment`，图标沿用系统自带的 `/usr/share/pixmaps/install-debian.png` | T10 第 3 步明确「图标保持系统自带的安装图标即可，不要自己画」 |
 | 2026-11-21 | `rust.yml` 的 `push` 触发由 `branches: ["**"]` 收窄为 `[main]` | 一次 PR 推送原本会同时触发 `push` 与 `pull_request` 两份运行（build-iso 自 T3 起就只限 main，没有这个问题；rust 有）。收窄后 PR 推送只跑一份，`pull_request` 仍然覆盖 PR 分支 |
+| 2026-11-26 | 多标签用 `gtk::Notebook`，不引入 libadwaita | 任务书要求不更换技术栈（GTK4），`Notebook` 自带标签栏、关闭按钮和 `switch-page` 信号，够用；libadwaita 会带来新的依赖与主题差异 |
+| 2026-11-26 | 快捷键用 `application.set_accels_for_action("win.*", …)` 绑到窗口动作上，不再用窗口上的 `EventControllerKey` | 实测在 Xvfb + openbox 下自建的窗口级 key controller 收不到按键（加了 `MENGOS_DEBUG_KEYS` 调试打印，`app.log` 里一条都没有）；accelerator 是 GTK 的标准路径，且能和右键菜单共用同一批 `win.*` 动作 |
+| 2026-11-26 | 搜索用 VTE 原生接口（`Regex::for_search` + `search_set_regex` + `search_find_next/previous`），并把用户输入先经 `escape_regex` 转义 | 任务书要求「查找」；转义后按字面量匹配，避免用户输入 `.` `*` 时被当正则通配符。PCRE2 的 flags 由 vte4 以裸 u32 传入（`PCRE2_UTF|PCRE2_UCP|PCRE2_MULTILINE`），vte4 没有导出对应常量 |
+| 2026-11-26 | 当前目录用 `/proc/<pid>/cwd` 的符号链接目标，1 秒定时器刷新（`glib::timeout_add_seconds_local`），并把它显示在标签标题和窗口标题上 | 这是内核给出的真实工作目录，一次 `readlink` 系统调用、不解析文本文件，开销可忽略；窗口标题带目录也让「目录跟踪是否生效」在 CI 截图里一眼可见 |
+| 2026-11-26 | `State` 用 `thread_local!` 里的强引用保活，所有信号回调只持 `Weak<State>` | 直接原因是 `build_ui` 返回时 `Rc<State>` 被回收，导致定时器立刻 Break、所有动作处理器变成空操作（标签建不出来、目录不更新）。用 `thread_local` 而不是让回调持强引用，是为了不形成「State → 控件 → 回调 → State」的引用环 |
+| 2026-11-26 | 标签标题 `Label` 必须同时设 `set_width_chars(12)` 与 `set_ellipsize(End)` | GTK4 里设了 `ellipsize` 的 Label 自然宽度按省略号算，只给 `max_width_chars` 会被压成「…」；`width_chars` 提供最小字符宽度 |
+| 2026-11-26 | `spawn_async` 回调里的 PID 用 `pid.into_glib()` 转 i32 再拼 `/proc/<pid>/cwd` | vte4 0.10 的回调类型是 `Result<glib::Pid, glib::Error>`（见 docs.rs 的 `vte4/src/terminal.rs` 源码），`glib::Pid` 不是 i32，直接赋值报 `E0308` |
