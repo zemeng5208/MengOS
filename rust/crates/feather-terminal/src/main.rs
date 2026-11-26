@@ -4,6 +4,8 @@
 //! 右键有菜单。与界面无关的纯逻辑（标签标题、正则转义）放在 `model` 模块里，便于单元测试。
 
 mod model;
+mod settings;
+mod sidebar;
 
 use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
@@ -16,6 +18,7 @@ use gtk::prelude::*;
 use vte4::prelude::*;
 
 use model::{escape_regex, title_from_path};
+use sidebar::Sidebar;
 
 /// 编译时由 CI 注入的版本号（例如 `0.0.1+31`）；本地构建没有注入时显示 `dev`。
 const BUILD_VERSION: &str = match option_env!("MENGOS_BUILD") {
@@ -76,6 +79,7 @@ struct Actions {
     close_tab: gio::SimpleAction,
     next_tab: gio::SimpleAction,
     prev_tab: gio::SimpleAction,
+    toggle_sidebar: gio::SimpleAction,
     copy: gio::SimpleAction,
     paste: gio::SimpleAction,
     select_all: gio::SimpleAction,
@@ -90,6 +94,7 @@ impl Actions {
             close_tab: gio::SimpleAction::new("close-tab", None),
             next_tab: gio::SimpleAction::new("next-tab", None),
             prev_tab: gio::SimpleAction::new("prev-tab", None),
+            toggle_sidebar: gio::SimpleAction::new("toggle-sidebar", None),
             copy: gio::SimpleAction::new("copy", None),
             paste: gio::SimpleAction::new("paste", None),
             select_all: gio::SimpleAction::new("select-all", None),
@@ -98,12 +103,13 @@ impl Actions {
         }
     }
 
-    fn all(&self) -> [&gio::SimpleAction; 9] {
+    fn all(&self) -> [&gio::SimpleAction; 10] {
         [
             &self.new_tab,
             &self.close_tab,
             &self.next_tab,
             &self.prev_tab,
+            &self.toggle_sidebar,
             &self.copy,
             &self.paste,
             &self.select_all,
@@ -116,7 +122,12 @@ impl Actions {
 /// 整个窗口共享的状态。
 struct State {
     window: gtk::ApplicationWindow,
+    /// 左右分栏：左边是标签页终端，右边是侧栏。
+    paned: gtk::Paned,
     notebook: gtk::Notebook,
+    sidebar: Rc<Sidebar>,
+    /// 侧栏宽度与显示状态（读写 `~/.config/mengos/feather-terminal.toml`）。
+    settings: RefCell<settings::SidebarSettings>,
     search_bar: gtk::SearchBar,
     search_entry: gtk::SearchEntry,
     search_status: gtk::Label,
@@ -143,6 +154,7 @@ fn install_accels(application: &gtk::Application) {
     let bindings = [
         ("win.new-tab", "<Control><Shift>t"),
         ("win.close-tab", "<Control><Shift>w"),
+        ("win.toggle-sidebar", "<Control><Shift>b"),
         ("win.toggle-search", "<Control><Shift>f"),
         ("win.copy", "<Control><Shift>c"),
         ("win.paste", "<Control><Shift>v"),
@@ -180,14 +192,36 @@ fn build_ui(application: &gtk::Application) {
     let notebook = gtk::Notebook::new();
     notebook.set_vexpand(true);
     notebook.set_scrollable(true);
-    root.append(&notebook);
+
+    // 右侧侧栏：6 个页面 + 左下角一排图标按钮。
+    let sidebar = Sidebar::build();
+    // 最小宽度 260：gtk::Paned 不会把子控件压到它的最小宽度以下
+    sidebar
+        .widget()
+        .set_size_request(settings::SIDEBAR_MIN_WIDTH, -1);
+    let saved_settings = settings::load();
+
+    let paned = gtk::Paned::new(gtk::Orientation::Horizontal);
+    paned.set_start_child(Some(&notebook));
+    paned.set_end_child(Some(sidebar.widget()));
+    paned.set_resize_start_child(true);
+    paned.set_shrink_start_child(false);
+    paned.set_shrink_end_child(false);
+    paned.set_vexpand(true);
+    // 窗口默认宽 1000，先按「1000 - 侧栏宽度」摆好分隔线；之后记住用户拖动后的宽度
+    paned.set_position((1000 - saved_settings.width).max(200));
+    sidebar.widget().set_visible(saved_settings.visible);
+    root.append(&paned);
 
     window.set_child(Some(&root));
 
     let actions = Actions::new();
     let state = Rc::new(State {
         window: window.clone(),
+        paned: paned.clone(),
         notebook: notebook.clone(),
+        sidebar: sidebar.clone(),
+        settings: RefCell::new(saved_settings),
         search_bar: search_bar.clone(),
         search_entry: search_entry.clone(),
         search_status: search_status.clone(),
@@ -197,6 +231,23 @@ fn build_ui(application: &gtk::Application) {
     });
     STATE.with(|slot| *slot.borrow_mut() = Some(Rc::clone(&state)));
 
+    // 点侧栏按钮后把键盘焦点还给终端，用户可以直接继续打字
+    let state_weak = Rc::downgrade(&state);
+    sidebar.connect_page_activated(move || {
+        if let Some(state) = state_weak.upgrade() {
+            focus_current_terminal(&state);
+        }
+    });
+
+    // 关窗前把侧栏宽度和显示状态写回配置文件
+    let state_weak = Rc::downgrade(&state);
+    window.connect_close_request(move |_| {
+        if let Some(state) = state_weak.upgrade() {
+            save_settings(&state);
+        }
+        glib::Propagation::Proceed
+    });
+
     for action in actions.all() {
         window.add_action(action);
     }
@@ -204,12 +255,13 @@ fn build_ui(application: &gtk::Application) {
     install_accels(application);
     install_search(&state);
 
-    // 切换标签时：焦点回到终端，窗口标题和搜索词跟着换。
+    // 切换标签时：焦点回到终端，窗口标题、侧栏目录和搜索词跟着换。
     let state_weak = Rc::downgrade(&state);
     notebook.connect_switch_page(move |_, _, _page| {
         if let Some(state) = state_weak.upgrade() {
             focus_current_terminal(&state);
             update_window_title(&state);
+            update_sidebar_cwd(&state);
             apply_search(&state);
         }
     });
@@ -246,6 +298,13 @@ fn wire_actions(state: &Rc<State>, actions: &Actions) {
     actions.prev_tab.connect_activate(move |_, _| {
         if let Some(state) = state_weak.upgrade() {
             switch_tab(&state, -1);
+        }
+    });
+
+    let state_weak = Rc::downgrade(state);
+    actions.toggle_sidebar.connect_activate(move |_, _| {
+        if let Some(state) = state_weak.upgrade() {
+            toggle_sidebar(&state);
         }
     });
 
@@ -510,6 +569,37 @@ fn update_window_title(state: &Rc<State>) {
     state.window.set_title(Some(&title));
 }
 
+/// 把当前标签的目录同步给侧栏的 6 个页面。
+fn update_sidebar_cwd(state: &Rc<State>) {
+    let dir = current_tab(state).and_then(|tab| tab.current_dir());
+    state.sidebar.set_current_dir(dir.as_deref());
+}
+
+/// 显示/隐藏侧栏（Ctrl+Shift+B）。隐藏后终端占满窗口。
+fn toggle_sidebar(state: &Rc<State>) {
+    let visible = !state.sidebar.widget().is_visible();
+    state.sidebar.widget().set_visible(visible);
+    state.settings.borrow_mut().visible = visible;
+    // 立刻存一次：即使用户之后异常退出，显示状态也不会丢
+    save_settings(state);
+    focus_current_terminal(state);
+}
+
+/// 把「侧栏宽度 + 是否显示」写进 `~/.config/mengos/feather-terminal.toml`。
+fn save_settings(state: &Rc<State>) {
+    let mut current = state.settings.borrow_mut();
+    current.visible = state.sidebar.widget().is_visible();
+
+    let window_width = state.window.width();
+    if window_width > 0 {
+        let sidebar_width = window_width - state.paned.position();
+        current.width =
+            sidebar_width.clamp(settings::SIDEBAR_MIN_WIDTH, settings::SIDEBAR_MAX_WIDTH);
+    }
+
+    settings::save(&current);
+}
+
 /// 每个终端一份右键菜单：新建标签页 / 复制 / 粘贴 / 全选 / 清屏。
 fn install_terminal_menu(state: &Rc<State>, terminal: &vte4::Terminal) {
     let menu = gio::Menu::new();
@@ -601,6 +691,7 @@ fn start_cwd_timer(state: &Rc<State>) {
             refresh_cwd(tab);
         }
         update_window_title(&state);
+        update_sidebar_cwd(&state);
         glib::ControlFlow::Continue
     });
 }
