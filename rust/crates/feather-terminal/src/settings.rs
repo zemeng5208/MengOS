@@ -34,15 +34,17 @@ impl Default for SidebarSettings {
 
 impl SidebarSettings {
     /// 把宽度收进 `[260, 1200]`：手改配置文件写成 0 或负数时也不会把侧栏挤没。
-    pub fn clamped(mut self) -> Self {
-        self.width = self.width.clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
-        self
+    pub fn clamped(&self) -> Self {
+        SidebarSettings {
+            width: self.width.clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH),
+            visible: self.visible,
+        }
     }
 
     /// 解析配置文件内容；格式错误返回错误信息（调用方负责退回默认值）。
     pub fn from_toml(text: &str) -> Result<Self, String> {
         toml::from_str::<SidebarSettings>(text)
-            .map(SidebarSettings::clamped)
+            .map(|settings| settings.clamped())
             .map_err(|error| error.to_string())
     }
 
