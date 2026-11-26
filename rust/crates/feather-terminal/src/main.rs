@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
 use gtk::glib;
+use gtk::glib::translate::IntoGlib;
 use gtk::prelude::*;
 use vte4::prelude::*;
 
@@ -549,7 +550,8 @@ fn spawn_shell(terminal: &vte4::Terminal, tab: Weak<Tab>) {
         move |result| match result {
             Ok(pid) => {
                 if let Some(tab) = tab.upgrade() {
-                    tab.pid.set(Some(pid));
+                    // `spawn_async` 给的是 `glib::Pid`，转成 i32 方便拼 `/proc/<pid>/cwd`。
+                    tab.pid.set(Some(pid.into_glib()));
                 }
             }
             Err(error) => eprintln!("启动 {shell_for_log} 失败：{error}"),
