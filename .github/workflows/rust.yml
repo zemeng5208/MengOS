@@ -71,7 +71,8 @@ jobs:
           set -u
           missing=0
           for icon in document-edit-symbolic network-wired-symbolic folder-symbolic \
-                      dialog-information-symbolic avatar-default-symbolic dialog-password-symbolic; do
+                      dialog-information-symbolic avatar-default-symbolic dialog-password-symbolic \
+                      text-x-generic-symbolic; do
             hits=$(find /usr/share/icons -type f \( -name "${icon}.svg" -o -name "${icon}.png" \) 2>/dev/null | head -n 3)
             if [ -z "$hits" ]; then
               echo "MISSING: $icon"
@@ -115,10 +116,14 @@ jobs:
             import -window root shot-sidebar-hidden.png
             xdotool key --clearmodifiers ctrl+shift+b
             sleep 1
-            # 点侧栏左下角第 3 个图标（文件树），页面应当切到「尚未实现（T13）」
+            # T13：点左下角第 3 个图标切到「文件树」页，先截主目录、再 cd /etc 截一张
             xdotool mousemove 875 697 click 1
-            sleep 2
+            sleep 3
             import -window root shot-sidebar.png
+            xdotool type --delay 100 "cd /etc"
+            xdotool key Return
+            sleep 3
+            import -window root shot-files.png
             xdotool type --delay 100 "echo hello-from-ci"
             xdotool key Return
             sleep 3
@@ -134,7 +139,7 @@ jobs:
             echo "== FeatherTerminal 自己的输出（含按键调试）=="
             cat app.log || true
           '
-          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-echo.png shot-tabs.png
+          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-files.png shot-echo.png shot-tabs.png
       - name: 上传截图
         uses: actions/upload-artifact@v4
         with:
@@ -143,6 +148,7 @@ jobs:
             rust/shot-start.png
             rust/shot-sidebar-hidden.png
             rust/shot-sidebar.png
+            rust/shot-files.png
             rust/shot-echo.png
             rust/shot-tabs.png
           if-no-files-found: error

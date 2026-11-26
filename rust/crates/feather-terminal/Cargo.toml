@@ -17,6 +17,8 @@ vte4 = { version = "0.10.0", features = ["gtk_v4_18"] }
 # 侧栏宽度/显示状态存到 ~/.config/mengos/feather-terminal.toml（任务书 T12 要求用 serde + toml）
 serde = { version = "1", features = ["derive"] }
 toml = "1"
+# 后台线程把结果送回主线程：std::thread 里 send_blocking，主线程 glib::spawn_future_local 里 recv
+async-channel = "2"
 
 [package.metadata.deb]
 maintainer = "zemeng5208"

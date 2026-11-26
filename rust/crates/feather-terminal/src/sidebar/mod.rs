@@ -16,10 +16,22 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 
-/// 一页侧栏：标题 + 「当前目录」那一行 + 占位内容。
+/// 「当前目录变了」的回调（每个页面自己决定怎么用）。
+pub type DirCallback = Rc<dyn Fn(Option<&Path>)>;
+
+/// 一页侧栏：标题 + 「当前目录」那一行 + 页面自己的内容。
 pub struct PageView {
     pub root: gtk::Box,
     pub cwd_label: gtk::Label,
+    /// 页面自己的「当前目录变化」处理（占位页面什么都不做）
+    pub on_dir_changed: DirCallback,
+}
+
+impl PageView {
+    /// 通知这一页「当前目录变了」。
+    pub fn dir_changed(&self, dir: Option<&Path>) {
+        (*self.on_dir_changed)(dir);
+    }
 }
 
 /// 一个页面模块的元信息，以及它的两个入口函数。
@@ -209,7 +221,11 @@ fn build_placeholder_page(title: &str, placeholder: &str) -> PageView {
     placeholder_label.add_css_class("dim-label");
     root.append(&placeholder_label);
 
-    PageView { root, cwd_label }
+    PageView {
+        root,
+        cwd_label,
+        on_dir_changed: Rc::new(|_| {}),
+    }
 }
 
 /// 把当前目录写进某一页的「当前目录」标签（6 个页面模块共用）。
