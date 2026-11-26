@@ -75,8 +75,8 @@ jobs:
           xvfb-run -a -s "-screen 0 1280x800x24" bash -euc '
             openbox &
             sleep 2
-            # MENGOS_DEBUG_KEYS=1：把收到的按键打到 app.log，方便排查快捷键问题
-            MENGOS_DEBUG_KEYS=1 ./target/release/feather-terminal >app.log 2>&1 &
+            # 程序的 stdout/stderr 落到 app.log，出问题时能在 CI 日志里直接看到
+            ./target/release/feather-terminal >app.log 2>&1 &
             APP=$!
             sleep 8
             if ! kill -0 "$APP" 2>/dev/null; then

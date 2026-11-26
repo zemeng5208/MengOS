@@ -9,6 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
+use gtk::gio;
 use gtk::glib;
 use gtk::glib::translate::IntoGlib;
 use gtk::prelude::*;
@@ -69,6 +70,49 @@ impl Tab {
     }
 }
 
+/// 窗口上的所有动作。快捷键通过 application accelerator 绑到这些动作上。
+struct Actions {
+    new_tab: gio::SimpleAction,
+    close_tab: gio::SimpleAction,
+    next_tab: gio::SimpleAction,
+    prev_tab: gio::SimpleAction,
+    copy: gio::SimpleAction,
+    paste: gio::SimpleAction,
+    select_all: gio::SimpleAction,
+    reset: gio::SimpleAction,
+    toggle_search: gio::SimpleAction,
+}
+
+impl Actions {
+    fn new() -> Actions {
+        Actions {
+            new_tab: gio::SimpleAction::new("new-tab", None),
+            close_tab: gio::SimpleAction::new("close-tab", None),
+            next_tab: gio::SimpleAction::new("next-tab", None),
+            prev_tab: gio::SimpleAction::new("prev-tab", None),
+            copy: gio::SimpleAction::new("copy", None),
+            paste: gio::SimpleAction::new("paste", None),
+            select_all: gio::SimpleAction::new("select-all", None),
+            reset: gio::SimpleAction::new("reset", None),
+            toggle_search: gio::SimpleAction::new("toggle-search", None),
+        }
+    }
+
+    fn all(&self) -> [&gio::SimpleAction; 9] {
+        [
+            &self.new_tab,
+            &self.close_tab,
+            &self.next_tab,
+            &self.prev_tab,
+            &self.copy,
+            &self.paste,
+            &self.select_all,
+            &self.reset,
+            &self.toggle_search,
+        ]
+    }
+}
+
 /// 整个窗口共享的状态。
 struct State {
     window: gtk::ApplicationWindow,
@@ -76,7 +120,7 @@ struct State {
     search_bar: gtk::SearchBar,
     search_entry: gtk::SearchEntry,
     search_status: gtk::Label,
-    paste_action: gtk::gio::SimpleAction,
+    paste_action: gio::SimpleAction,
     tabs: RefCell<Vec<Rc<Tab>>>,
     next_tab_id: Cell<u64>,
 }
@@ -85,6 +129,22 @@ fn main() {
     let application = gtk::Application::new(Some("com.mengos.FeatherTerminal"), Default::default());
     application.connect_activate(build_ui);
     application.run();
+}
+
+/// 快捷键：用 GTK 的 accelerator 绑到窗口动作上（比自己在窗口上接按键事件可靠）。
+fn install_accels(application: &gtk::Application) {
+    let bindings = [
+        ("win.new-tab", "<Control><Shift>t"),
+        ("win.close-tab", "<Control><Shift>w"),
+        ("win.toggle-search", "<Control><Shift>f"),
+        ("win.copy", "<Control><Shift>c"),
+        ("win.paste", "<Control><Shift>v"),
+        ("win.next-tab", "<Control>Page_Down"),
+        ("win.prev-tab", "<Control>Page_Up"),
+    ];
+    for (action, accel) in bindings {
+        application.set_accels_for_action(action, &[accel]);
+    }
 }
 
 fn build_ui(application: &gtk::Application) {
@@ -117,168 +177,104 @@ fn build_ui(application: &gtk::Application) {
 
     window.set_child(Some(&root));
 
-    // 右键菜单用的动作，作用对象是「当前标签」。
-    let new_tab_action = gtk::gio::SimpleAction::new("new-tab", None);
-    let copy_action = gtk::gio::SimpleAction::new("copy", None);
-    let paste_action = gtk::gio::SimpleAction::new("paste", None);
-    let select_all_action = gtk::gio::SimpleAction::new("select-all", None);
-    let reset_action = gtk::gio::SimpleAction::new("reset", None);
-
+    let actions = Actions::new();
     let state = Rc::new(State {
         window: window.clone(),
         notebook: notebook.clone(),
         search_bar: search_bar.clone(),
         search_entry: search_entry.clone(),
         search_status: search_status.clone(),
-        paste_action: paste_action.clone(),
+        paste_action: actions.paste.clone(),
         tabs: RefCell::new(Vec::new()),
         next_tab_id: Cell::new(1),
     });
 
-    wire_actions(
-        &state,
-        &new_tab_action,
-        &copy_action,
-        &paste_action,
-        &select_all_action,
-        &reset_action,
-    );
-    window.add_action(&new_tab_action);
-    window.add_action(&copy_action);
-    window.add_action(&paste_action);
-    window.add_action(&select_all_action);
-    window.add_action(&reset_action);
+    for action in actions.all() {
+        window.add_action(action);
+    }
+    wire_actions(&state, &actions);
+    install_accels(application);
+    install_search(&state);
 
-    // 切换标签时：焦点回到终端，搜索词应用到新标签。
+    // 切换标签时：焦点回到终端，窗口标题和搜索词跟着换。
     let state_weak = Rc::downgrade(&state);
     notebook.connect_switch_page(move |_, _, _page| {
         if let Some(state) = state_weak.upgrade() {
             focus_current_terminal(&state);
+            update_window_title(&state);
             apply_search(&state);
         }
     });
 
-    install_shortcuts(&state);
-    install_search(&state);
     start_cwd_timer(&state);
-
     new_tab(&state);
     window.present();
 }
 
-/// 把菜单动作接到具体操作上。
-fn wire_actions(
-    state: &Rc<State>,
-    new_tab_action: &gtk::gio::SimpleAction,
-    copy_action: &gtk::gio::SimpleAction,
-    paste_action: &gtk::gio::SimpleAction,
-    select_all_action: &gtk::gio::SimpleAction,
-    reset_action: &gtk::gio::SimpleAction,
-) {
+/// 把动作接到具体操作上。
+fn wire_actions(state: &Rc<State>, actions: &Actions) {
     let state_weak = Rc::downgrade(state);
-    new_tab_action.connect_activate(move |_, _| {
+    actions.new_tab.connect_activate(move |_, _| {
         if let Some(state) = state_weak.upgrade() {
             new_tab(&state);
         }
     });
 
     let state_weak = Rc::downgrade(state);
-    copy_action.connect_activate(move |_, _| {
+    actions.close_tab.connect_activate(move |_, _| {
+        if let Some(state) = state_weak.upgrade() {
+            close_current_tab(&state);
+        }
+    });
+
+    let state_weak = Rc::downgrade(state);
+    actions.next_tab.connect_activate(move |_, _| {
+        if let Some(state) = state_weak.upgrade() {
+            switch_tab(&state, 1);
+        }
+    });
+
+    let state_weak = Rc::downgrade(state);
+    actions.prev_tab.connect_activate(move |_, _| {
+        if let Some(state) = state_weak.upgrade() {
+            switch_tab(&state, -1);
+        }
+    });
+
+    let state_weak = Rc::downgrade(state);
+    actions.toggle_search.connect_activate(move |_, _| {
+        if let Some(state) = state_weak.upgrade() {
+            toggle_search(&state);
+        }
+    });
+
+    let state_weak = Rc::downgrade(state);
+    actions.copy.connect_activate(move |_, _| {
         if let Some(tab) = state_weak.upgrade().and_then(|state| current_tab(&state)) {
             tab.terminal.copy_clipboard_format(vte4::Format::Text);
         }
     });
 
     let state_weak = Rc::downgrade(state);
-    paste_action.connect_activate(move |_, _| {
+    actions.paste.connect_activate(move |_, _| {
         if let Some(tab) = state_weak.upgrade().and_then(|state| current_tab(&state)) {
             tab.terminal.paste_clipboard();
         }
     });
 
     let state_weak = Rc::downgrade(state);
-    select_all_action.connect_activate(move |_, _| {
+    actions.select_all.connect_activate(move |_, _| {
         if let Some(tab) = state_weak.upgrade().and_then(|state| current_tab(&state)) {
             tab.terminal.select_all();
         }
     });
 
     let state_weak = Rc::downgrade(state);
-    reset_action.connect_activate(move |_, _| {
+    actions.reset.connect_activate(move |_, _| {
         if let Some(tab) = state_weak.upgrade().and_then(|state| current_tab(&state)) {
             tab.terminal.reset(true, true);
         }
     });
-}
-
-/// Ctrl+Shift+C 复制、Ctrl+Shift+V 粘贴；Ctrl+Shift+T 新建标签、Ctrl+Shift+W 关闭标签、
-/// Ctrl+Shift+F 搜索；Ctrl+PageUp/PageDown 切换标签。Ctrl+C 不拦截，直接交给终端里的程序。
-fn install_shortcuts(state: &Rc<State>) {
-    let controller = gtk::EventControllerKey::new();
-    controller.set_propagation_phase(gtk::PropagationPhase::Capture);
-    let state_weak = Rc::downgrade(state);
-
-    controller.connect_key_pressed(move |_, keyval, _keycode, modifier| {
-        let Some(state) = state_weak.upgrade() else {
-            return glib::Propagation::Proceed;
-        };
-        let ctrl = modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK);
-        let shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
-
-        if std::env::var_os("MENGOS_DEBUG_KEYS").is_some() {
-            eprintln!("[keys] name={:?} ctrl={ctrl} shift={shift}", keyval.name());
-        }
-
-        // 按下 Shift 时 GDK 给的 keyval 是大写字母，没按 Shift 时是小写，
-        // 两种都接受，避免快捷键在某些键盘布局下失效。
-        let is_c = keyval == gtk::gdk::Key::C || keyval == gtk::gdk::Key::c;
-        let is_v = keyval == gtk::gdk::Key::V || keyval == gtk::gdk::Key::v;
-        let is_t = keyval == gtk::gdk::Key::T || keyval == gtk::gdk::Key::t;
-        let is_w = keyval == gtk::gdk::Key::W || keyval == gtk::gdk::Key::w;
-        let is_f = keyval == gtk::gdk::Key::F || keyval == gtk::gdk::Key::f;
-
-        if ctrl && shift {
-            if is_c {
-                if let Some(tab) = current_tab(&state) {
-                    tab.terminal.copy_clipboard_format(vte4::Format::Text);
-                }
-                return glib::Propagation::Stop;
-            }
-            if is_v {
-                if let Some(tab) = current_tab(&state) {
-                    tab.terminal.paste_clipboard();
-                }
-                return glib::Propagation::Stop;
-            }
-            if is_t {
-                new_tab(&state);
-                return glib::Propagation::Stop;
-            }
-            if is_w {
-                close_current_tab(&state);
-                return glib::Propagation::Stop;
-            }
-            if is_f {
-                toggle_search(&state);
-                return glib::Propagation::Stop;
-            }
-        }
-
-        if ctrl && !shift {
-            if keyval == gtk::gdk::Key::Page_Up {
-                switch_tab(&state, -1);
-                return glib::Propagation::Stop;
-            }
-            if keyval == gtk::gdk::Key::Page_Down {
-                switch_tab(&state, 1);
-                return glib::Propagation::Stop;
-            }
-        }
-
-        glib::Propagation::Proceed
-    });
-
-    state.window.add_controller(controller);
 }
 
 /// 搜索框的三种事件：输入变化 → 重新搜；回车 → 下一个；Shift+回车 → 上一个；
@@ -461,6 +457,7 @@ fn close_tab(state: &Rc<State>, id: u64) {
         state.window.close();
     } else {
         focus_current_terminal(state);
+        update_window_title(state);
     }
 }
 
@@ -481,6 +478,7 @@ fn switch_tab(state: &Rc<State>, delta: i32) {
     let next = (current + delta).rem_euclid(pages as i32) as u32;
     state.notebook.set_current_page(Some(next));
     focus_current_terminal(state);
+    update_window_title(state);
 }
 
 /// 当前标签（标签顺序与 `state.tabs` 的顺序一致）。
@@ -495,9 +493,18 @@ fn focus_current_terminal(state: &Rc<State>) {
     }
 }
 
+/// 窗口标题带上当前标签的目录，方便看出「当前目录跟踪」是活的。
+fn update_window_title(state: &Rc<State>) {
+    let title = match current_tab(state).and_then(|tab| tab.current_dir()) {
+        Some(dir) => format!("FeatherTerminal {BUILD_VERSION} — {}", dir.display()),
+        None => format!("FeatherTerminal {BUILD_VERSION}"),
+    };
+    state.window.set_title(Some(&title));
+}
+
 /// 每个终端一份右键菜单：新建标签页 / 复制 / 粘贴 / 全选 / 清屏。
 fn install_terminal_menu(state: &Rc<State>, terminal: &vte4::Terminal) {
-    let menu = gtk::gio::Menu::new();
+    let menu = gio::Menu::new();
     menu.append(Some("新建标签页"), Some("win.new-tab"));
     menu.append(Some("复制"), Some("win.copy"));
     menu.append(Some("粘贴"), Some("win.paste"));
@@ -561,7 +568,7 @@ fn spawn_shell(terminal: &vte4::Terminal, tab: Weak<Tab>) {
         glib::SpawnFlags::DEFAULT,
         || {},
         -1,
-        None::<&gtk::gio::Cancellable>,
+        None::<&gio::Cancellable>,
         move |result| match result {
             Ok(pid) => {
                 if let Some(tab) = tab.upgrade() {
@@ -574,7 +581,7 @@ fn spawn_shell(terminal: &vte4::Terminal, tab: Weak<Tab>) {
     );
 }
 
-/// 每秒刷新一次每个标签的当前目录（数据来源：`/proc/<pid>/cwd`）。
+/// 每秒刷新一次每个标签的当前目录（数据来源：`/proc/<pid>/cwd`），并更新窗口标题。
 fn start_cwd_timer(state: &Rc<State>) {
     let state_weak = Rc::downgrade(state);
     glib::timeout_add_seconds_local(1, move || {
@@ -582,9 +589,10 @@ fn start_cwd_timer(state: &Rc<State>) {
             return glib::ControlFlow::Break;
         };
         let tabs: Vec<Rc<Tab>> = state.tabs.borrow().clone();
-        for tab in tabs {
-            refresh_cwd(&tab);
+        for tab in &tabs {
+            refresh_cwd(tab);
         }
+        update_window_title(&state);
         glib::ControlFlow::Continue
     });
 }
