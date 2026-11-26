@@ -61,7 +61,10 @@ pub fn build(callbacks: Callbacks) -> FileTree {
 
     let factory = gtk::SignalListItemFactory::new();
     let on_menu = Rc::clone(&callbacks.on_menu);
-    factory.connect_bind(move |_, list_item| {
+    factory.connect_bind(move |_, object| {
+        let Some(list_item) = object.downcast_ref::<gtk::ListItem>() else {
+            return;
+        };
         let Some(row) = list_item
             .item()
             .and_then(|item| item.downcast::<gtk::TreeListRow>().ok())

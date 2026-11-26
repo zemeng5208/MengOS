@@ -97,9 +97,10 @@ impl FileMenu {
         } else {
             "用默认程序打开"
         };
-        self.menu.append(open_label, "file.open");
-        self.menu.append("在文件管理器中显示", "file.reveal");
-        self.menu.append("复制路径", "file.copy-path");
+        self.menu.append(Some(open_label), Some("file.open"));
+        self.menu
+            .append(Some("在文件管理器中显示"), Some("file.reveal"));
+        self.menu.append(Some("复制路径"), Some("file.copy-path"));
     }
 
     /// 弹出菜单（锚在「···」按钮下方）。

@@ -7,6 +7,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use gtk::gio;
+use gtk::gio::prelude::*;
 
 /// 一个目录最多显示多少项，超过就截断并提示。
 pub const MAX_ENTRIES: usize = 2000;
