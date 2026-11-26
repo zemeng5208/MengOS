@@ -91,9 +91,16 @@ jobs:
             xdotool key Return
             sleep 3
             import -window root shot-echo.png
+            # T11：新建标签页并在第二个标签里 cd /tmp，标签标题应变成 tmp
+            xdotool key ctrl+shift+t
+            sleep 2
+            xdotool type --delay 100 "cd /tmp"
+            xdotool key Return
+            sleep 3
+            import -window root shot-tabs.png
             kill "$APP" || true
           '
-          ls -l shot-start.png shot-echo.png
+          ls -l shot-start.png shot-echo.png shot-tabs.png
       - name: 上传截图
         uses: actions/upload-artifact@v4
         with:
@@ -101,6 +108,7 @@ jobs:
           path: |
             rust/shot-start.png
             rust/shot-echo.png
+            rust/shot-tabs.png
           if-no-files-found: error
 
   # 只在 main 上推送时运行：把最新的 FeatherTerminal .deb 传到 dev-latest 预发布，
