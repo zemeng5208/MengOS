@@ -220,7 +220,7 @@ pub fn untracked_lines(content: &str, max_bytes: usize) -> (Vec<String>, bool) {
 }
 
 /// 只保留前 `max` 行，返回是否发生了截断。
-pub fn truncate_lines(lines: &mut Vec<String>, max: usize) -> bool {
+pub fn truncate_lines<T>(lines: &mut Vec<T>, max: usize) -> bool {
     if lines.len() <= max {
         return false;
     }

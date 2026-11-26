@@ -77,38 +77,25 @@ impl DiffView {
 
     /// 显示若干段内容；返回是否因为超过 `max_lines` 而被截断。
     pub fn show_sections(&self, sections: &[Section], max_lines: usize) -> bool {
-        self.buffer.set_text("");
-        let mut shown = 0usize;
-        let mut truncated = false;
-
+        // 先把「段标题 + 每一行」摊平成一个列表，再统一截断，
+        // 这样「只显示前 N 行」是按最终显示的行数算的。
+        let mut rows: Vec<(&'static str, String)> = Vec::new();
         for section in sections {
             if section.lines.is_empty() {
                 continue;
             }
-            if shown >= max_lines {
-                truncated = true;
-                break;
-            }
-            self.insert_line(&format!("== {} ==", section.title), "section");
-            shown += 1;
-
+            rows.push(("section", format!("== {} ==", section.title)));
             for line in &section.lines {
-                if shown >= max_lines {
-                    truncated = true;
-                    break;
-                }
-                let tag = match model::classify_line(line) {
-                    DiffLineKind::Added => "added",
-                    DiffLineKind::Removed => "removed",
-                    DiffLineKind::Hunk => "hunk",
-                    DiffLineKind::Meta => "meta",
-                    DiffLineKind::Context => "plain",
-                };
-                self.insert_line(line, tag);
-                shown += 1;
+                rows.push((tag_for(line), line.clone()));
             }
         }
 
+        let truncated = model::truncate_lines(&mut rows, max_lines);
+
+        self.buffer.set_text("");
+        for (tag, text) in &rows {
+            self.insert_line(text, tag);
+        }
         self.scroll_to_top();
         truncated
     }
@@ -138,7 +125,18 @@ impl DiffView {
 fn add_tag(table: &gtk::TextTagTable, name: &str, properties: &[(&str, glib::Value)]) {
     let tag = gtk::TextTag::new(Some(name));
     for (key, value) in properties {
-        tag.set_property(*key, value.clone());
+        tag.set_property(key, value.clone());
     }
     table.add(&tag);
+}
+
+/// 一行文本对应的 TextTag 名字。
+fn tag_for(line: &str) -> &'static str {
+    match model::classify_line(line) {
+        DiffLineKind::Added => "added",
+        DiffLineKind::Removed => "removed",
+        DiffLineKind::Hunk => "hunk",
+        DiffLineKind::Meta => "meta",
+        DiffLineKind::Context => "plain",
+    }
 }
