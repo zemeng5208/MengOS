@@ -1,0 +1,1 @@
+Name:	feather-terminal State:	S (sleeping) Tgid:	4242 Pid:	4242 PPid:	4241 Uid:	1000	1000	1000	1000 Gid:	1000	1000	1000	1000 Groups:	1000 27 999

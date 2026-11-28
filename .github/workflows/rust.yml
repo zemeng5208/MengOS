@@ -170,6 +170,10 @@ jobs:
             xdotool key Return
             sleep 5
             import -window root shot-network.png
+            # T16：切到「个人资料」页（第 5 个图标），等后台读完再截图
+            xdotool mousemove 963 710 click 1
+            sleep 3
+            import -window root shot-profile.png
             # T11：新建标签页并在第二个标签里 cd /tmp，标签标题应变成 tmp
             xdotool key --clearmodifiers ctrl+shift+t
             sleep 2
@@ -181,7 +185,7 @@ jobs:
             echo "== FeatherTerminal 自己的输出（含按键调试）=="
             cat app.log || true
           '
-          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-files.png shot-echo.png shot-changes.png shot-changes-diff.png shot-network.png shot-tabs.png
+          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-files.png shot-echo.png shot-changes.png shot-changes-diff.png shot-network.png shot-profile.png shot-tabs.png
       - name: 上传截图
         uses: actions/upload-artifact@v4
         with:
@@ -195,6 +199,7 @@ jobs:
             rust/shot-changes.png
             rust/shot-changes-diff.png
             rust/shot-network.png
+            rust/shot-profile.png
             rust/shot-tabs.png
           if-no-files-found: error
 
