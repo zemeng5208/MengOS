@@ -21,7 +21,7 @@ use model::{escape_regex, title_from_path};
 use sidebar::Sidebar;
 
 /// 编译时由 CI 注入的版本号（例如 `0.0.1+31`）；本地构建没有注入时显示 `dev`。
-const BUILD_VERSION: &str = match option_env!("MENGOS_BUILD") {
+pub(crate) const BUILD_VERSION: &str = match option_env!("MENGOS_BUILD") {
     Some(version) => version,
     None => "dev",
 };
