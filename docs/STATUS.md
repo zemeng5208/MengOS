@@ -18,7 +18,7 @@
 | T13 侧栏：文件树与预览 | 已完成（等待验收） | 2026-11-26 | 127235d（squash 合并，PR #13） | ① 文件树用 `gtk::ListView` + `gtk::TreeListModel` + `glib::BoxedAnyObject` 存条目；展开文件夹时才由 `create_func` 去读它的内容（懒加载）；② 读目录/查 MIME/读文件全部在 `std::thread` 里做，用 `async-channel` 把结果送回主线程（主线程不碰文件系统）；③ 文件夹在前、按名称排序（不区分大小写再按原名）、隐藏文件默认不显示（顶部开关）、超过 2000 项截断并显示「已截断」、有「刷新」按钮、终端目录变化自动跟随；④ 预览区（垂直 `gtk::Paned` 分隔）：文本按 `standard::content-type` 判断后等宽只读显示前 200KB（超出标「文件过大，仅显示前 200KB」）、图片用 `gtk::Picture`（>32MB 不解码）、二进制显示「二进制文件，无法预览」+类型+大小、读失败显示具体错误；⑤ 右键/「···」菜单：默认程序打开（`.html`/`.htm` 显示为「在默认浏览器中打开」）、`org.freedesktop.FileManager1.ShowItems` 在文件管理器中显示（失败退回 `thunar <目录>`）、复制路径；⑥ 双击文件夹只改文件树（顶部「正在浏览：…（与终端目录不同）」+「回到终端目录」），不动终端目录；⑦ `files/model.rs` 8 个纯函数单元测试（排序/截断/隐藏/大小/类型/html）；⑧ CI 实测：`7 passed` + `20 passed`（12 旧 + 8 新），clippy/格式通过；`shot-files.png` 显示 `/etc` 下 alternatives、apt、bash_completion.d、ca-certificates、cron.daily… 等目录带展开箭头；⑨ `app.log` 里能看到真实读取记录：`文件树：/etc 读到 108 项`、`文件树：/tmp 读到 2 项`、`文件树：/github/home 读到 0 项`（家目录只有隐藏文件）；main run#43 三个 job 全 success，`feather-terminal_0.0.1+43_amd64.deb` 359,688 字节 |
 | T14 侧栏：文件更改（Git Diff） | 已完成（等待验收） | 2026-11-26 | 83f6488（squash 合并，PR #14） | ① 后台跑 `git -C <当前目录> rev-parse --show-toplevel` 判断仓库：不是仓库显示任务书原话「当前目录不是 Git 仓库，无法显示文件更改。（非 Git 文件需要基线快照才能对比，本功能暂不支持）」，没有 git 显示「未安装 git」；② 文件列表来自 `git status --porcelain=v1 -z`，`gtk::ListBox` 每行显示 `XY` 标记 + 路径（重命名显示「新 ← 旧」），顶部显示「N 个文件有更改」/「没有更改」；③ 单击文件后台跑 `git diff --no-color --no-ext-diff -- <路径>` 与加 `--cached` 的同一条命令，两段分别标「已暂存（git diff --cached）」「未暂存（git diff）」；未跟踪文件显示「新文件（未跟踪）」+ 内容（最多 200KB，全部按新增行）；④ `gtk::TextView` + `TextTag` 着色：`+` 绿底、`-` 红底、`@@` 蓝灰加粗、`diff --git`/`index`/`---`/`+++`/`\ No newline` 灰色，等宽只读；⑤ 超过 5000 行只显示前 5000 行并提示「已截断：只显示前 5000 行」；⑥ 页面可见时（`is_mapped()`）每 3 秒自动刷新列表，被 Stack 切走就不刷新；「刷新」按钮立即刷新；⑦ `changes/model.rs` 11 个纯函数单元测试（样例在 `tests/fixtures/`：空格文件名、中文文件名、重命名、删除、`MM`/`UU` 混合、空输入、diff 行分类、`+++`/`---` 不算增删、截断、未跟踪预览、多字节字符边界）；⑧ CI 实测：`7 passed` + `31 passed`（20 旧 + 11 新），clippy/格式通过；⑨ `shot-changes.png` 显示「文件更改 / 当前目录：/tmp/gitdemo / 2 个文件有更改 / M a.txt / ?? b.txt」，`shot-changes-diff.png` 显示 `== 未暂存（git diff） ==` 段：灰色 `diff --git`、`index`、`---`、`+++`，蓝灰加粗 `@@ -1,2 +1,2 @@`，` 第一行` 普通色，`+第二行` 绿色背景；main run#48 三个 job 全 success，`feather-terminal_0.0.1+48_amd64.deb` 380,752 字节 |
 | T15 侧栏：网络连接 | 已完成（等待验收） | 2026-11-28 | dd4daf2（squash 合并，PR #15） | ① 进程树：从当前标签 shell 的 PID 出发，把所有 `/proc/<pid>/stat` 拼成一张表，用「最后一个 `)` 之后的第二个字段」取父进程号（进程名里带空格/括号也不会切错），BFS 出整棵树；② 连接：读每个进程 `/proc/<pid>/fd/` 里 `socket:[inode]` 链接，再到 `/proc/net/{tcp,tcp6,udp,udp6}` 按 inode 匹配；③ 解析全是自己写的纯函数（不引额外 crate）：十六进制小端 IPv4（`0100007F`→`127.0.0.1`）、IPv6（每 8 位一个 32 位小端字，`::1`、`::ffff:127.0.0.1` 都对）、端口（大端，`1F40`→8000）、TCP 状态码（`0A`→`LISTEN`、`01`→`ESTABLISHED` 等 12 种，UDP 的 `07` 显示成 `UDP`）；④ 显示：每行 `进程名(PID) 协议 远端地址:端口 状态`，顶部「当前程序 → 本机网络 → 远端地址」，监听中的端口单独分组「监听中的端口」，无连接显示「暂无网络连接」，底部固定说明「数据来源：本机连接表（/proc/net）。仅表示本机存在该连接，不代表对方已收到数据。」；⑤ 页面可见时（`is_mapped()`）每 2 秒后台刷新，切标签按新 PID 立即刷新，读不到的进程跳过、不用 root/sudo；⑥ 12 个单元测试（样例在 `tests/fixtures/proc-net-tcp.txt`、`proc-net-tcp6.txt`、`proc-net-udp.txt`、`proc-stat.txt`）；⑦ CI 实测：`7 passed` + `44 passed`（20 旧 + 11 文件更改 + 12 网络 + 1 collector），clippy/格式通过；⑧ `shot-network.png` 显示「网络连接 / 当前目录：/tmp/gitdemo / 2 个连接 · 1 个监听端口 · 3 个进程 / 监听中的端口：python3(4296) TCP 监听 0.0.0.0:8765 LISTEN / 连接：python3(4296) TCP 127.0.0.1:52588 ESTABLISHED、python3(4301) TCP 127.0.0.1:8765 ESTABLISHED」；main run#57 三个 job 全 success，`feather-terminal_0.0.1+57_amd64.deb` 409,280 字节 |
-| T16 侧栏：个人资料 + 第二批收尾 | 进行中 | 2026-11-28 | — | 个人资料页已实现（12 个纯函数单元测试）；`README.md` 与 `docs/USER_GUIDE_ZH.md` 已更新；ISO 构建结果稍后补 |
+| T16 侧栏：个人资料 + 第二批收尾 | 已完成（等待验收） | 2026-11-28 | dc78b4e（squash 合并，PR #16） | ① 个人资料页全部读本机真实数据、读不到写「未知」：用户名/UID/所属组来自 `/proc/self/status` + `/etc/passwd` + `/etc/group`，主机名 `/proc/sys/kernel/hostname`，系统版本 `/etc/os-release` 的 `PRETTY_NAME`，内核版本 `/proc/sys/kernel/osrelease`，当前 shell 环境变量 `SHELL`，终端版本编译期注入，本次开机 `/proc/uptime`；② 常用命令 Top 10：读 `~/.zsh_history`（或 `$HISTFILE`），去掉 zsh 扩展历史前缀 `: 时间:耗时;`，**只取每行第一个单词**，跳过空行和注释行，按次数排序、并列按字典序；页面写明任务书原话「只统计命令名称，不显示参数。数据只在本机读取，不上传。」，文件不存在显示「暂无历史记录」；③ AI 使用统计一栏写「未关联（FeatherBot 尚未实现）」；④ 解析逻辑全是纯函数（`strip_history_prefix`、`command_name`、`top_commands`、`parse_uptime`、`format_uptime`、`parse_os_release`、`parse_self_status`、`username_for_uid`、`group_names`），样例放 `tests/fixtures/`（`zsh-history.txt`、`proc-uptime.txt`、`os-release.txt`、`proc-self-status.txt`、`passwd.txt`、`group.txt`），8 个单元测试 + 1 个 collector 测试；⑤ 所有读取都在后台线程，界面不阻塞，「刷新」按钮重读；⑥ CI 实测 `7 passed` + `53 passed`（20 旧 + 11 文件更改 + 12 网络 + 1 collector + 9 个人资料），clippy/格式通过；⑦ `shot-profile.png` 显示「个人资料 / 当前目录：/tmp/gitdemo / 用户名 root / UID 0 / 所属组 root / 主机名 be83e0438101 / 系统版本 Debian GNU/Linux 13 (trixie) / 内核版本 7.0.1-1020-azure / 当前 shell 未知 / 终端版本 0.0.1+59 / 本次开机 2 分 28 秒 / 常用命令 Top 10 + 说明 + 暂无历史记录 / AI 使用统计：未关联（FeatherBot 尚未实现）」（CI 容器里没有 `SHELL` 环境变量、也没有 `~/.zsh_history`，所以如实显示「未知」「暂无历史记录」，不是编造）；⑧ 收尾：`README.md` 重写（当前状态、如何下载 ISO、`mengos-update-terminal` 用法、8 个快捷键、侧栏 6 页状态表），新增 `docs/USER_GUIDE_ZH.md`（逐页用法 + 数据来源 + 隐私说明 + 尚未实现的页面）；⑨ main run#60 三个 job 全 success，`feather-terminal_0.0.1+60_amd64.deb` 427,732 字节 |
 
 ## 验收修复记录（2026-11-19，用户实测 dev.14 后提出）
 
@@ -36,7 +36,7 @@
 
 第二批任务进行中：**T11、T12、T13、T14、T15 已完成并合并**（`6930f93`、`b0120c7`、`127235d`、`83f6488`、`dd4daf2`），等待验收（按用户要求，全部验收集中到最后一起做）。用户可以用 `mengos-update-terminal` 把 .deb 更新到 `0.0.1+57`（约 409KB，不用下 ISO），再按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8、T14 的 A0–A7、T15 的 A0–A6 逐条检查。
 
-正在做 **T16（侧栏：个人资料 + 第二批收尾）**：个人资料页已实现，正在等 CI 与 ISO 构建。
+第二批任务 **T11–T16 已全部完成并合并**（`6930f93`、`b0120c7`、`127235d`、`83f6488`、`dd4daf2`、`dc78b4e`），正在构建带全部新功能的 ISO。
 
 ## 遇到的问题
 
@@ -72,18 +72,24 @@
 - 本轮推送遇到 GitHub 网络抖动（`Recv failure: Connection was reset` / `Failed to connect to github.com port 443`），重试 7 次后成功；CI 轮询期间 `gh api` 也报过两次 `error connecting to api.github.com`，运行本身没受影响。
 - 每次 PR 推送除了 `rust` 工作流，还会额外触发一次 `build-iso`（PR 触发不带路径过滤）和 `check-packages`，约 13 分钟的 ISO 构建其实是白跑；这是已知的浪费，暂不改动（改动触发规则的风险大于收益）。
 
-## 下一步要执行的命令
-
-T15 已合并（`dd4daf2`），开始 T16（个人资料页 + 第二批收尾）。验收按用户要求集中到最后一起做；届时用户只需在 MengOS 里跑 `mengos-update-terminal`（从 `dev-latest` 下约 400KB 的 deb）就能拿到 `0.0.1+57`，按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8、T14 的 A0–A7、T15 的 A0–A6 检查多标签、搜索、目录跟踪、侧栏 6 页、文件树与预览、Git diff、网络连接。
-
-`powershell
-# 在 MengOS 里把 FeatherTerminal 更新到最新（不用下 ISO）
-mengos-update-terminal
-
-# 本地：看 T13 的 CI 证据
-gh run download 45775908648 --repo zemeng5208/MengOS --name gui-smoke --dir D:\MengOS\tmp\gui-smoke-t14b
-`
 - T14 失败 3 次，都是真编译/检查错误：①`error[E0599]: no associated function or constant named new_with_buffer`——gtk4 0.11.5 里是 `gtk::TextView::with_buffer`；同时 clippy 报 `unused_mut`（`file.take(...)` 不需要 `mut`）；②clippy `-D warnings` 报 `truncate_lines` 从未被使用（只在测试里用）+ `explicit_auto_deref`（`*key` 改成 `key`）——把 `truncate_lines` 改成泛型并真正用于「先摊平再统一截断」，顺便修掉 deref；③gui-smoke 第一次虽然通过，但截图里侧栏还停在「文件树」页：`xdotool` 点的 (795,697) 落在第 1 个按钮的圆角外（只弹出了 tooltip 没触发点击），改成点按钮正中心 (803,710) 后正常切页。
 - T14 期间网络依旧不稳：多次 `git push` 报 `Failed to connect to github.com port 443`，靠重试循环（最多 12 次）解决；`gh run view` 的日志下载也偶发 TLS 握手超时，重试即可。
 - T15 失败 4 次：①clippy `-D warnings` 报 `is_listening` / `parse_proc_stat_table` 从未使用（只在测试里用）——改成真正在 collector 里用：`Connection.listening` 由 `NetEntry::is_listening()` 算出，进程树改成「把所有 /proc/<pid>/stat 拼成一张表」再交给 `parse_proc_stat_table`；②`error[E0382]: borrow of partially moved value: entry`——`entry.remote` 被 move 后又调 `entry.is_listening()`，改成先算 `let listening = ...`；③3 个单元测试挂了，是我算错了十六进制：`0x1F90` 是 8080、`0x1F40` 才是 8000，改了样例和断言（顺手保留 `1F90`→8080 这条断言）；④gui-smoke 第一次截图里只有监听端口、没有已建立连接：CI 脚本里 `python3 -c "...('127.0.0.1',8765)..."` 的单引号被外层 `bash -euc '...'` 吃掉了，客户端报 SyntaxError——改成把客户端写成 `/tmp/netclient.py`（heredoc 在 `bash -euc` 外面），脚本里只 `xdotool type "python3 /tmp/netclient.py &"`。
 - T15 期间还调了两次列宽：一开始 `python3(4…`、`127.0.0…`、`ESTABL…` 都被省略号截断（`set_width_chars` 同时决定最小宽度和自然宽度），改成进程 13 字符、地址 15 字符、状态不设宽度 + `caption` 小字号、行间距 2、页面左右边距 4，四列才都完整显示。
+- T16 失败 1 次：`sidebar::profile::model::tests::self_status_gives_uid_gid_and_groups` 挂掉——`tests/fixtures/proc-self-status.txt` 被我写成了**一整行**（PowerShell 里 `-join "`n"` 的换行没生效，条目之间变成了空格），`split_once(':')` 只能拿到第一条。改成用 `[char]10` 拼换行、并核对字节数（145 字节 / 8 个 `0A`）后通过。
+
+## 下一步要执行的命令
+
+第二批（T11–T16）已全部完成并合并。验收按用户要求**集中到最后一起做**：
+
+1. 在 MengOS 里更新终端（不用重下 ISO）：跑 `mengos-update-terminal`，拿到 `0.0.1+60`
+2. 或者装最新 ISO：Actions → `build-iso` 最新一次成功运行 → Artifacts → `mengos-iso`
+3. 按任务书 T11 的 A0–A7、T12 的 A0–A6、T13 的 A0–A8、T14 的 A0–A7、T15 的 A0–A6、T16 的 A0–A5 逐条检查
+
+```powershell
+# 在 MengOS 里把 FeatherTerminal 更新到最新（不用下 ISO）
+mengos-update-terminal
+
+# 本地：看 T16 的 CI 截图证据
+gh run download 46131229454 --repo zemeng5208/MengOS --name gui-smoke --dir D:\MengOS\tmp\gui-smoke-t16
+```
