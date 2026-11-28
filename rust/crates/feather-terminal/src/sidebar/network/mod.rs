@@ -257,7 +257,7 @@ fn clear(state: &Rc<NetworkState>) {
 ///
 /// 监听中的端口没有「对方」，地址列显示本地监听地址。
 fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
-    let line = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    let line = gtk::Box::new(gtk::Orientation::Horizontal, 4);
 
     let process = gtk::Label::new(Some(&format!("{}({})", connection.process, connection.pid)));
     // 侧栏只有 ~350px：`width_chars` 同时决定最小宽度和自然宽度，
@@ -273,6 +273,7 @@ fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
     protocol.set_xalign(0.0);
     protocol.add_css_class("monospace");
     protocol.add_css_class("dim-label");
+    protocol.add_css_class("caption");
 
     let address_text = if connection.is_listening() {
         format!("监听 {}", connection.local)
@@ -296,6 +297,7 @@ fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
     state_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
     state_label.add_css_class("monospace");
     state_label.add_css_class("dim-label");
+    state_label.add_css_class("caption");
 
     line.append(&process);
     line.append(&protocol);
