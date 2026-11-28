@@ -260,7 +260,9 @@ fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
     let line = gtk::Box::new(gtk::Orientation::Horizontal, 6);
 
     let process = gtk::Label::new(Some(&format!("{}({})", connection.process, connection.pid)));
-    process.set_width_chars(10);
+    // 侧栏只有 ~350px：`width_chars` 同时决定最小宽度和自然宽度，
+    // 给 13 刚好放得下 `python3(12345)`，否则 PID 会被省略号吃掉。
+    process.set_width_chars(13);
     process.set_ellipsize(gtk::pango::EllipsizeMode::End);
     process.set_xalign(0.0);
     process.set_tooltip_text(Some(&format!("{}({})", connection.process, connection.pid)));
@@ -278,7 +280,7 @@ fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
         connection.remote.clone()
     };
     let address = gtk::Label::new(Some(&address_text));
-    address.set_width_chars(14);
+    address.set_width_chars(15);
     address.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
     address.set_xalign(0.0);
     address.set_hexpand(true);
@@ -290,6 +292,8 @@ fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
 
     let state_label = gtk::Label::new(Some(connection.state));
     state_label.set_xalign(0.0);
+    // 不设 width_chars：状态名（ESTABLISHED / LISTEN）要完整显示，不能省略
+    state_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
     state_label.add_css_class("monospace");
     state_label.add_css_class("dim-label");
 
