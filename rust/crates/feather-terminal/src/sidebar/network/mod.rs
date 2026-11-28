@@ -47,8 +47,9 @@ pub fn build() -> PageView {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 6);
     root.set_margin_top(8);
     root.set_margin_bottom(8);
-    root.set_margin_start(8);
-    root.set_margin_end(8);
+    // 侧栏窄：左右只留 4px，把宽度让给列表里的四列
+    root.set_margin_start(4);
+    root.set_margin_end(4);
 
     let title_label = gtk::Label::new(None);
     title_label.set_markup("<b>网络连接</b>");
@@ -257,7 +258,7 @@ fn clear(state: &Rc<NetworkState>) {
 ///
 /// 监听中的端口没有「对方」，地址列显示本地监听地址。
 fn connection_row(connection: &collector::Connection) -> gtk::ListBoxRow {
-    let line = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    let line = gtk::Box::new(gtk::Orientation::Horizontal, 2);
 
     let process = gtk::Label::new(Some(&format!("{}({})", connection.process, connection.pid)));
     // 侧栏只有 ~350px：`width_chars` 同时决定最小宽度和自然宽度，
