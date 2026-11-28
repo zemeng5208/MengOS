@@ -185,6 +185,8 @@ pub fn build() -> PageView {
         root: state.root.clone(),
         cwd_label,
         on_dir_changed,
+        // 文件更改页只关心目录，PID 变化不用管
+        on_pid_changed: Rc::new(|_| {}),
     }
 }
 

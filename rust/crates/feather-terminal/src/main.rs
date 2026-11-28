@@ -569,10 +569,17 @@ fn update_window_title(state: &Rc<State>) {
     state.window.set_title(Some(&title));
 }
 
-/// 把当前标签的目录同步给侧栏的 6 个页面。
+/// 把当前标签的目录和 shell PID 同步给侧栏的 6 个页面。
+///
+/// 目录给「文件更改」「文件树」等页面用；PID 给「网络连接」页用
+/// （它要从 shell 出发找整棵进程树，才知道该显示哪些连接）。
 fn update_sidebar_cwd(state: &Rc<State>) {
-    let dir = current_tab(state).and_then(|tab| tab.current_dir());
+    let tab = current_tab(state);
+    let dir = tab.as_ref().and_then(|tab| tab.current_dir());
     state.sidebar.set_current_dir(dir.as_deref());
+    state
+        .sidebar
+        .set_current_pid(tab.as_ref().and_then(|tab| tab.pid.get()));
 }
 
 /// 显示/隐藏侧栏（Ctrl+Shift+B）。隐藏后终端占满窗口。

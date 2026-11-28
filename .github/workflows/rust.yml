@@ -65,7 +65,7 @@ jobs:
           apt-get update
           apt-get install -y libgtk-4-dev libvte-2.91-gtk4-dev pkg-config \
             xvfb xauth imagemagick xdotool dbus-x11 fonts-noto-cjk zsh openbox \
-            adwaita-icon-theme elementary-xfce-icon-theme
+            adwaita-icon-theme elementary-xfce-icon-theme python3
       - name: 检查侧栏图标在图标主题里是否存在
         run: |
           set -u
@@ -105,6 +105,14 @@ jobs:
           printf '第二行\n' >> /tmp/gitdemo/a.txt
           printf '新文件\n' > /tmp/gitdemo/b.txt
           git -C /tmp/gitdemo status --porcelain=v1
+          # T15：客户端脚本单独写成文件，避免 xdotool 在 bash -euc '...' 里被单引号截断
+          cat > /tmp/netclient.py <<'PY'
+          import socket
+          import time
+
+          connection = socket.create_connection(("127.0.0.1", 8765))
+          time.sleep(30)
+          PY
           xvfb-run -a -s "-screen 0 1280x800x24" bash -euc '
             openbox &
             sleep 2
@@ -151,6 +159,17 @@ jobs:
             xdotool mousemove 900 196 click 1
             sleep 2
             import -window root shot-changes-diff.png
+            # T15：切到「网络连接」页（第 2 个图标），起一个 http.server + 一个客户端，
+            # 等 2 秒自动刷新后再截图
+            xdotool mousemove 843 710 click 1
+            sleep 1
+            xdotool type --delay 100 "python3 -m http.server 8765 >/dev/null 2>&1 &"
+            xdotool key Return
+            sleep 2
+            xdotool type --delay 80 "python3 /tmp/netclient.py &"
+            xdotool key Return
+            sleep 5
+            import -window root shot-network.png
             # T11：新建标签页并在第二个标签里 cd /tmp，标签标题应变成 tmp
             xdotool key --clearmodifiers ctrl+shift+t
             sleep 2
@@ -162,7 +181,7 @@ jobs:
             echo "== FeatherTerminal 自己的输出（含按键调试）=="
             cat app.log || true
           '
-          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-files.png shot-echo.png shot-changes.png shot-changes-diff.png shot-tabs.png
+          ls -l shot-start.png shot-sidebar-hidden.png shot-sidebar.png shot-files.png shot-echo.png shot-changes.png shot-changes-diff.png shot-network.png shot-tabs.png
       - name: 上传截图
         uses: actions/upload-artifact@v4
         with:
@@ -175,6 +194,7 @@ jobs:
             rust/shot-echo.png
             rust/shot-changes.png
             rust/shot-changes-diff.png
+            rust/shot-network.png
             rust/shot-tabs.png
           if-no-files-found: error
 
