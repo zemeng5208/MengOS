@@ -11,6 +11,16 @@
 - 每次推送到 `main` 都会自动构建 ISO，产物在 GitHub Actions 的 Artifacts 里。
 - 终端程序另外打了一个约 400KB 的 `.deb`，可以不下 ISO 就更新（见下）。
 
+## 最近一次构建
+
+| 项目 | 值 |
+|---|---|
+| ISO 文件 | `MengOS-0.0.1-dev.53-amd64.iso` |
+| 大小 | 约 1.8G（Actions artifact 压缩包 1,908,908,936 字节） |
+| SHA256 | `9b8cc4a7e9994b250f2f2bff2a4f2a39cf65c4225a3978f01670aa45f3cdb5ec` |
+| 构建 | `build-iso` run#53（commit `dc78b4e`），两个 job 全 success |
+| 对应终端版本 | `feather-terminal 0.0.1+60`（427,732 字节 deb） |
+
 ## 如何下载 ISO
 
 1. 打开 Actions 页面：<https://github.com/zemeng5208/MengOS/actions/workflows/build-iso.yml>
